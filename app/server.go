@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 
 	// Uncomment this block to pass the first stage
 	"net"
@@ -25,15 +26,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	b := make([]byte, 1024)
-	_, err = conn.Read(b)
-	if err != nil {
-		fmt.Println("error reading from client: ", err)
-		os.Exit(1)
-	}
+	var b []byte
+	for {
+		b = make([]byte, 1024)
+		_, err = conn.Read(b)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Println("error reading from client: ", err)
+			os.Exit(1)
+		}
 
-	if _, err := conn.Write([]byte("+PONG\r\n")); err != nil {
-		fmt.Println("error writing to client: ", err)
-		os.Exit(1)
+		if _, err := conn.Write([]byte("+PONG\r\n")); err != nil {
+			fmt.Println("error writing to client: ", err)
+			os.Exit(1)
+		}
 	}
 }
