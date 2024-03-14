@@ -109,35 +109,43 @@ func (i Int) Bytes() []byte {
 
 // *** *** //
 
-type BulkString string
+type BulkString struct {
+	string
+	IsNull bool
+}
 
 func ParseBulkString(r io.Reader) (s BulkString, err error) {
 	len, err := ParseInt(r)
 	if err != nil {
-		return "", err
+		return s, err
 	}
 
 	if len < 0 {
-		return "", nil
+		s.IsNull = true
+		return s, nil
 	}
 
 	bytes := make([]byte, len)
 	if len > 0 {
 		if _, err := r.Read(bytes[:]); err != nil {
-			return "", errors.Wrap(ErrInvalidChar, "Read")
+			return s, errors.Wrap(ErrInvalidChar, "Read")
 		}
 	}
 
 	var crlf [2]byte
 	if _, err := r.Read(crlf[:]); err != nil {
-		return "", errors.Wrap(ErrInvalidChar, "Read")
+		return s, errors.Wrap(ErrInvalidChar, "Read")
 	}
 
-	return BulkString(bytes), nil
+	s.string = string(bytes)
+	return s, nil
 }
 
 func (s BulkString) Bytes() []byte {
-	return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(s), s))
+	if s.IsNull {
+		return []byte("$-1\r\n")
+	}
+	return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(s.string), s.string))
 }
 
 // *** *** //
