@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"slices"
 	"strconv"
 
 	"github.com/pkg/errors"
@@ -132,9 +131,6 @@ func ParseBulkString(r io.Reader) (s BulkString, err error) {
 	var crlf [2]byte
 	if _, err := r.Read(crlf[:]); err != nil {
 		return "", errors.Wrap(ErrInvalidChar, "Read")
-	}
-	if !slices.Equal(crlf[:], []byte("\r\n")) {
-		return "", errors.Wrap(ErrInvalidChar, "expected crlf")
 	}
 
 	return BulkString(bytes), nil
