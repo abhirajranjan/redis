@@ -47,6 +47,8 @@ func handleConn(conn net.Conn) {
 			conn.Write([]byte("cannot convert cmd to array"))
 		}
 
-		HandleFunc(arr, conn)
+		if err := HandleFunc(arr, conn); err != nil {
+			fmt.Println(err)
+		}
 	}
 }

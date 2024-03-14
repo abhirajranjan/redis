@@ -1,6 +1,8 @@
 package main
 
-import "sync"
+import (
+	"sync"
+)
 
 type store struct {
 	m sync.Map
@@ -13,6 +15,10 @@ func (s *store) Set(k CMD, v CMD) {
 }
 
 func (s *store) Get(k CMD) (value CMD, ok bool) {
-	v, ok := s.m.Load(s)
-	return v.(CMD), ok
+	v, ok := s.m.Load(k)
+	if ok {
+		return v.(CMD), ok
+	}
+
+	return nil, false
 }
