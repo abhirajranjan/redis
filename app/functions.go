@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -73,15 +74,49 @@ func get(arr Array, w io.Writer) error {
 }
 
 func set(arr Array, w io.Writer) error {
-	if len(arr) != 2 {
-		err := errors.New("ERR only k,v args needed")
+	param := SetParam{}
+	if len(arr) < 2 {
+		err := errors.New("ERR k,v args needed")
 		w.Write(SimpleError(err.Error()).Bytes())
 		return err
 	}
 
-	Store.Set(arr[0], arr[1])
+	for i := 2; i < len(arr)-1; i += 2 {
+		if err := parseSetParam(arr[i], arr[i+1], &param); err != nil {
+			w.Write([]byte(err.Error()))
+			return err
+		}
+	}
+
+	Store.Set(arr[0], arr[1], &param)
 	_, err := w.Write(SimpleString("OK").Bytes())
 	return err
+}
+
+func parseSetParam(key, val CMD, p *SetParam) error {
+	k, ok := String(key)
+	if !ok {
+		return errors.Errorf("ERR %s not string", key)
+	}
+
+	v, ok := String(val)
+	if !ok {
+		return errors.Errorf("ERR %s not string", val)
+	}
+
+	k = strings.ToLower(k)
+	switch k {
+	case "px":
+		d, err := time.ParseDuration(v + "ms")
+		if err != nil {
+			return errors.Errorf("ERR %s invalid duration", v)
+		}
+		p.Ex = time.Now().Add(d)
+		return nil
+
+	default:
+		return errors.Errorf("ERR invalid param %s", k)
+	}
 }
 
 func String(val CMD) (string, bool) {
