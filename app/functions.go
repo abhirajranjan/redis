@@ -30,6 +30,8 @@ func HandleFunc(args Array, w io.Writer) error {
 		return get(args, w)
 	case "set":
 		return set(args, w)
+	case "info":
+		return info(args, w)
 	}
 	return errors.WithMessagef(ErrUnknownCMD, "%s", args[0])
 }
@@ -83,7 +85,7 @@ func set(arr Array, w io.Writer) error {
 
 	for i := 2; i < len(arr)-1; i += 2 {
 		if err := parseSetParam(arr[i], arr[i+1], &param); err != nil {
-			w.Write([]byte(err.Error()))
+			w.Write(SimpleError(err.Error()).Bytes())
 			return err
 		}
 	}
@@ -91,6 +93,35 @@ func set(arr Array, w io.Writer) error {
 	Store.Set(arr[0], arr[1], &param)
 	_, err := w.Write(SimpleString("OK").Bytes())
 	return err
+}
+
+func info(arr Array, w io.Writer) error {
+	str := ""
+	if len(arr) == 0 {
+		arr = append(arr, SimpleString("replication"))
+	}
+
+	for _, v := range arr {
+		s, ok := String(v)
+		if !ok {
+			err := errors.New("ERR require string type")
+			w.Write(SimpleError(err.Error()).Bytes())
+			return err
+		}
+
+		if s == "replication" {
+			str += replication()
+		}
+	}
+
+	_, err := w.Write(BulkString{string: str}.Bytes())
+	return err
+}
+
+func replication() string {
+	return `# Replication
+role:master
+`
 }
 
 func parseSetParam(key, val CMD, p *SetParam) error {
