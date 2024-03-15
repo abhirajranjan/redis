@@ -72,5 +72,23 @@ func replconf(rw io.ReadWriter) error {
 	}
 
 	fmt.Println(strconv.Quote(string(cmd.Bytes())))
+
+	arr = resp.Array{
+		resp.BulkString{Str: "REPLCONF"},
+		resp.BulkString{Str: "capa"},
+		resp.BulkString{Str: "psync2"},
+	}
+
+	_, err = rw.Write(arr.Bytes())
+	if err != nil {
+		return errors.Wrap(err, "replconf")
+	}
+
+	cmd, err = resp.Parse(rw)
+	if err != nil {
+		return errors.Wrap(err, "resp.Parse")
+	}
+
+	fmt.Println(strconv.Quote(string(cmd.Bytes())))
 	return nil
 }
