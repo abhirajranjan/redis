@@ -116,5 +116,26 @@ func psync(rw io.ReadWriter) error {
 	}
 
 	fmt.Println(strconv.Quote(string(cmd.Bytes())))
+
+	var b [1]byte
+	if _, err := rw.Read(b[:]); err != nil {
+		return errors.Wrap(err, "error reading rdb first byte")
+	}
+
+	if b[0] != '$' {
+		return errors.New("expecting $ prefix")
+	}
+
+	len, err := resp.ParseInt(rw)
+	if err != nil {
+		return errors.New("expecting int")
+	}
+
+	bin := make([]byte, len)
+	if _, err := rw.Read(bin); err != nil {
+		return errors.Wrap(err, "error reading rdb")
+	}
+
+	fmt.Println(bin)
 	return nil
 }
