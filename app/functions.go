@@ -123,6 +123,8 @@ func repl() string {
 	b := strings.Builder{}
 	b.WriteString("# Replication\n")
 	b.WriteString(fmt.Sprintf("role:%s\n", Config.Replication.Role))
+	b.WriteString(fmt.Sprintf("master_replid:%s\n", "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"))
+	b.WriteString(fmt.Sprintf("master_repl_offset:%d\n", 0))
 	return b.String()
 }
 
