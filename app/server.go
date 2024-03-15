@@ -13,6 +13,7 @@ var port int
 
 func init() {
 	flag.IntVar(&port, "port", 6379, "specifies the port (default 6379)")
+	flag.Var(&Replication, "replicaof", "specifies the master")
 	flag.Parse()
 }
 

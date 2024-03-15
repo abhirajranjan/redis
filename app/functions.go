@@ -110,18 +110,12 @@ func info(arr Array, w io.Writer) error {
 		}
 
 		if s == "replication" {
-			str += replication()
+			str += Replication.String()
 		}
 	}
 
 	_, err := w.Write(BulkString{string: str}.Bytes())
 	return err
-}
-
-func replication() string {
-	return `# Replication
-role:master
-`
 }
 
 func parseSetParam(key, val CMD, p *SetParam) error {
