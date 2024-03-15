@@ -18,7 +18,7 @@ var (
 )
 
 type replication struct {
-	Role Role
+	Role Role `resp:"role"`
 	host string
 	port int
 }
@@ -49,11 +49,18 @@ func (r replication) String() string {
 	)
 
 	for i := 0; i < rv.NumField(); i++ {
-		if !rt.Field(i).IsExported() {
+		fv := rv.Field(i)
+		ft := rt.Field(i)
+
+		if !ft.IsExported() {
 			continue
 		}
-		fv := rv.Field(i)
-		key = rt.Field(i).Name
+		tg, ok := rt.Field(i).Tag.Lookup("resp")
+		if !ok {
+			continue
+		}
+
+		key = tg
 
 		switch fv.Kind() {
 		case reflect.String:
