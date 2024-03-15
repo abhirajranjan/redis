@@ -79,6 +79,8 @@ func replconf(rw io.ReadWriter) error {
 	arr = resp.Array{
 		resp.BulkString{Str: "REPLCONF"},
 		resp.BulkString{Str: "capa"},
+		resp.BulkString{Str: "eof"},
+		resp.BulkString{Str: "capa"},
 		resp.BulkString{Str: "psync2"},
 	}
 

@@ -35,6 +35,10 @@ func HandleFunc(args resp.Array, w io.Writer) error {
 		return set(args, w)
 	case "info":
 		return info(args, w)
+	case "replconf":
+		return replconf(args, w)
+	case "psync":
+		return psync(args, w)
 	}
 	return errors.WithMessagef(ErrUnknownCMD, "%s", args[0])
 }
@@ -154,6 +158,41 @@ func parseSetParam(key, val resp.CMD, p *SetParam) error {
 	default:
 		return errors.Errorf("ERR invalid param %s", k)
 	}
+}
+
+func replconf(arr resp.Array, w io.Writer) error {
+	if len(arr) < 1 {
+		w.Write(resp.SimpleError("ERR incorrect number of arguments").Bytes())
+		return nil
+	}
+
+	cmd, ok := String(arr[0])
+	if !ok {
+		err := errors.Errorf("ERR expected string type %s", arr[0])
+		w.Write(resp.SimpleError(err.Error()).Bytes())
+		return err
+	}
+	switch strings.ToLower(cmd) {
+	case "listening-port":
+		if len(arr) < 2 {
+			w.Write(resp.SimpleError("ERR incorrect number of arguments").Bytes())
+			return nil
+		}
+
+		fmt.Println("port", arr[1])
+		w.Write(resp.SimpleString("OK").Bytes())
+		return nil
+
+	case "capa":
+		w.Write(resp.SimpleString("OK").Bytes())
+		return nil
+	}
+	return nil
+}
+
+func psync(args resp.Array, w io.Writer) error {
+	w.Write(resp.SimpleString("OK").Bytes())
+	return nil
 }
 
 func String(val resp.CMD) (string, bool) {
