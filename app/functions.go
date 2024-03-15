@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -129,8 +130,8 @@ func repl() string {
 	b := strings.Builder{}
 	b.WriteString("# Replication\n")
 	b.WriteString(fmt.Sprintf("role:%s\n", config.Replication.Role))
-	b.WriteString(fmt.Sprintf("master_replid:%s\n", "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"))
-	b.WriteString(fmt.Sprintf("master_repl_offset:%d\n", 0))
+	b.WriteString(fmt.Sprintf("master_replid:%s\n", config.Replication.MasterReplId))
+	b.WriteString(fmt.Sprintf("master_repl_offset:%d\n", config.Replication.MasterReplOffset))
 	return b.String()
 }
 
@@ -190,8 +191,35 @@ func replconf(arr resp.Array, w io.Writer) error {
 	return nil
 }
 
-func psync(args resp.Array, w io.Writer) error {
-	w.Write(resp.SimpleString("OK").Bytes())
+func psync(arr resp.Array, w io.Writer) error {
+	if len(arr) < 2 {
+		w.Write(resp.SimpleError("ERR incorrect number of arguments").Bytes())
+		return nil
+	}
+
+	replid, ok := String(arr[0])
+	if !ok {
+		err := errors.Errorf("ERR expected string type %s", arr[0])
+		w.Write(resp.SimpleError(err.Error()).Bytes())
+		return err
+	}
+
+	offset, ok := Int(arr[1])
+	if !ok {
+		err := errors.Errorf("ERR expected int type %s", arr[1])
+		w.Write(resp.SimpleError(err.Error()).Bytes())
+		return err
+	}
+
+	if replid == "?" {
+		replid = config.Replication.MasterReplId
+	}
+
+	if offset == -1 {
+		offset = int64(config.Replication.MasterReplOffset)
+	}
+
+	w.Write(resp.SimpleString(fmt.Sprintf("FULLRESYNC %s %d", replid, offset)).Bytes())
 	return nil
 }
 
@@ -204,4 +232,21 @@ func String(val resp.CMD) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func Int(val resp.CMD) (int64, bool) {
+	if v, ok := val.(resp.Int); ok {
+		return int64(v), true
+	}
+
+	cmd, ok := String(val)
+	if ok {
+		i, err := strconv.ParseInt(cmd, 10, 64)
+		if err != nil {
+			return 0, false
+		}
+		return i, true
+	}
+
+	return 0, false
 }

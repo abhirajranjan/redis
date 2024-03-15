@@ -19,14 +19,18 @@ type server struct {
 }
 
 type replication struct {
-	Role Role `resp:"role"`
-	Host string
-	Port int64
+	Role             Role `resp:"role"`
+	Host             string
+	Port             int64
+	MasterReplId     string
+	MasterReplOffset int
 }
 
 func init() {
 	Server.Port = 6379
 	Replication.Role = RoleMaster
+	Replication.MasterReplId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
+	Replication.MasterReplOffset = 0
 
 	args := os.Args[1:]
 	for idx, v := range args {
