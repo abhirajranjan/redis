@@ -6,23 +6,25 @@ import (
 	"strings"
 	"time"
 
+	"github.com/codecrafters-io/redis-starter-go/app/config"
+	"github.com/codecrafters-io/redis-starter-go/app/resp"
 	"github.com/pkg/errors"
 )
 
 var ErrUnknownCMD = errors.New("unknown command")
 
-func HandleFunc(args Array, w io.Writer) error {
+func HandleFunc(args resp.Array, w io.Writer) error {
 	if len(args) < 1 {
 		return ErrUnknownCMD
 	}
 
-	cmd, ok := args[0].(BulkString)
+	cmd, ok := String(args[0])
 	if !ok {
 		return errors.WithMessagef(ErrUnknownCMD, "'%s' error casting to string", args[0])
 	}
 
 	args = args[1:]
-	switch strings.ToLower(cmd.string) {
+	switch strings.ToLower(cmd) {
 	case "ping":
 		return ping(args, w)
 	case "echo":
@@ -37,14 +39,14 @@ func HandleFunc(args Array, w io.Writer) error {
 	return errors.WithMessagef(ErrUnknownCMD, "%s", args[0])
 }
 
-func ping(_ Array, w io.Writer) error {
-	_, err := w.Write(BulkString{string: "PONG"}.Bytes())
+func ping(_ resp.Array, w io.Writer) error {
+	_, err := w.Write(resp.BulkString{Str: "PONG"}.Bytes())
 	return err
 }
 
-func echo(arr Array, w io.Writer) error {
+func echo(arr resp.Array, w io.Writer) error {
 	if len(arr) == 0 {
-		_, err := w.Write(SimpleString("").Bytes())
+		_, err := w.Write(resp.SimpleString("").Bytes())
 		return err
 	}
 
@@ -57,16 +59,16 @@ func echo(arr Array, w io.Writer) error {
 	return err
 }
 
-func get(arr Array, w io.Writer) error {
+func get(arr resp.Array, w io.Writer) error {
 	if len(arr) != 1 {
 		err := errors.New("ERR only 1 arg needed")
-		w.Write(SimpleError(err.Error()).Bytes())
+		w.Write(resp.SimpleError(err.Error()).Bytes())
 		return err
 	}
 
 	val, ok := Store.Get(arr[0])
 	if !ok {
-		if _, err := w.Write(BulkString{IsNull: true}.Bytes()); err != nil {
+		if _, err := w.Write(resp.BulkString{IsNull: true}.Bytes()); err != nil {
 			return err
 		}
 		return nil
@@ -76,37 +78,37 @@ func get(arr Array, w io.Writer) error {
 	return err
 }
 
-func set(arr Array, w io.Writer) error {
+func set(arr resp.Array, w io.Writer) error {
 	param := SetParam{}
 	if len(arr) < 2 {
 		err := errors.New("ERR k,v args needed")
-		w.Write(SimpleError(err.Error()).Bytes())
+		w.Write(resp.SimpleError(err.Error()).Bytes())
 		return err
 	}
 
 	for i := 2; i < len(arr)-1; i += 2 {
 		if err := parseSetParam(arr[i], arr[i+1], &param); err != nil {
-			w.Write(SimpleError(err.Error()).Bytes())
+			w.Write(resp.SimpleError(err.Error()).Bytes())
 			return err
 		}
 	}
 
 	Store.Set(arr[0], arr[1], &param)
-	_, err := w.Write(SimpleString("OK").Bytes())
+	_, err := w.Write(resp.SimpleString("OK").Bytes())
 	return err
 }
 
-func info(arr Array, w io.Writer) error {
+func info(arr resp.Array, w io.Writer) error {
 	str := ""
 	if len(arr) == 0 {
-		arr = append(arr, SimpleString("replication"))
+		arr = append(arr, resp.SimpleString("replication"))
 	}
 
 	for _, v := range arr {
 		s, ok := String(v)
 		if !ok {
 			err := errors.New("ERR require string type")
-			w.Write(SimpleError(err.Error()).Bytes())
+			w.Write(resp.SimpleError(err.Error()).Bytes())
 			return err
 		}
 
@@ -115,20 +117,20 @@ func info(arr Array, w io.Writer) error {
 		}
 	}
 
-	_, err := w.Write(BulkString{string: str}.Bytes())
+	_, err := w.Write(resp.BulkString{Str: str}.Bytes())
 	return err
 }
 
 func repl() string {
 	b := strings.Builder{}
 	b.WriteString("# Replication\n")
-	b.WriteString(fmt.Sprintf("role:%s\n", Config.Replication.Role))
+	b.WriteString(fmt.Sprintf("role:%s\n", config.Replication.Role))
 	b.WriteString(fmt.Sprintf("master_replid:%s\n", "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"))
 	b.WriteString(fmt.Sprintf("master_repl_offset:%d\n", 0))
 	return b.String()
 }
 
-func parseSetParam(key, val CMD, p *SetParam) error {
+func parseSetParam(key, val resp.CMD, p *SetParam) error {
 	k, ok := String(key)
 	if !ok {
 		return errors.Errorf("ERR %s not string", key)
@@ -154,12 +156,12 @@ func parseSetParam(key, val CMD, p *SetParam) error {
 	}
 }
 
-func String(val CMD) (string, bool) {
+func String(val resp.CMD) (string, bool) {
 	switch v := val.(type) {
-	case SimpleString:
+	case resp.SimpleString:
 		return string(v), true
-	case BulkString:
-		return v.string, true
+	case resp.BulkString:
+		return v.Str, true
 	default:
 		return "", false
 	}

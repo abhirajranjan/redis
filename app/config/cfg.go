@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"os"
@@ -8,15 +8,11 @@ import (
 type Role string
 
 var (
-	RoleMaster Role = "master"
-	RoleSlave  Role = "slave"
-	Config     config
-)
-
-type config struct {
-	Replication replication
+	RoleMaster  Role = "master"
+	RoleSlave   Role = "slave"
 	Server      server
-}
+	Replication replication
+)
 
 type server struct {
 	Port int
@@ -25,12 +21,12 @@ type server struct {
 type replication struct {
 	Role Role `resp:"role"`
 	Host string
-	Port int
+	Port int64
 }
 
 func init() {
-	Config.Server.Port = 6379
-	Config.Replication.Role = RoleMaster
+	Server.Port = 6379
+	Replication.Role = RoleMaster
 
 	args := os.Args[1:]
 	for idx, v := range args {
@@ -40,7 +36,7 @@ func init() {
 			if err != nil {
 				panic("port is should be int")
 			}
-			Config.Server.Port = int(port)
+			Server.Port = int(port)
 
 		case "--replicaof":
 			host := args[idx+1]
@@ -49,9 +45,9 @@ func init() {
 				panic("port is should be int")
 			}
 
-			Config.Replication.Role = RoleSlave
-			Config.Replication.Host = host
-			Config.Replication.Port = int(port)
+			Replication.Role = RoleSlave
+			Replication.Host = host
+			Replication.Port = port
 		}
 	}
 }

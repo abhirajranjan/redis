@@ -1,4 +1,4 @@
-package main
+package resp
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ type CMD interface {
 
 var ErrInvalidChar = errors.New("invalid char")
 
-func ParseResp(r io.Reader) (CMD, error) {
+func Parse(r io.Reader) (CMD, error) {
 	b := make([]byte, 1)
 	if _, err := r.Read(b); err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func (i Int) Bytes() []byte {
 // *** *** //
 
 type BulkString struct {
-	string
+	Str    string
 	IsNull bool
 }
 
@@ -137,7 +137,7 @@ func ParseBulkString(r io.Reader) (s BulkString, err error) {
 		return s, errors.Wrap(ErrInvalidChar, "Read")
 	}
 
-	s.string = string(bytes)
+	s.Str = string(bytes)
 	return s, nil
 }
 
@@ -145,7 +145,7 @@ func (s BulkString) Bytes() []byte {
 	if s.IsNull {
 		return []byte("$-1\r\n")
 	}
-	return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(s.string), s.string))
+	return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(s.Str), s.Str))
 }
 
 // *** *** //
@@ -164,7 +164,7 @@ func ParseArray(r io.Reader) (cmdArr Array, err error) {
 
 	cmdArr = make(Array, numArgs)
 	for i := 0; i < int(numArgs); i++ {
-		cmdArr[i], err = ParseResp(r)
+		cmdArr[i], err = Parse(r)
 		if err != nil {
 			return nil, err
 		}
@@ -331,12 +331,12 @@ func ParseMap(r io.Reader) (Map, error) {
 
 	mapp := make(Map, len)
 	for ; len > 0; len-- {
-		key, err := ParseResp(r)
+		key, err := Parse(r)
 		if err != nil {
 			return nil, err
 		}
 
-		value, err := ParseResp(r)
+		value, err := Parse(r)
 		if err != nil {
 			return nil, err
 		}
@@ -368,7 +368,7 @@ func ParseSet(r io.Reader) (Set, error) {
 
 	s := make(Set, len)
 	for ; len > 0; len-- {
-		v, err := ParseResp(r)
+		v, err := Parse(r)
 		if err != nil {
 			return nil, err
 		}

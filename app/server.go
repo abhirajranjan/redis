@@ -6,16 +6,24 @@ import (
 
 	"net"
 	"os"
+
+	"github.com/codecrafters-io/redis-starter-go/app/config"
+	"github.com/codecrafters-io/redis-starter-go/app/replication"
+	"github.com/codecrafters-io/redis-starter-go/app/resp"
 )
 
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
 
-	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", Config.Server.Port))
+	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", config.Server.Port))
 	if err != nil {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
+	}
+
+	if config.Replication.Role == config.RoleSlave {
+		go replication.HandleReplication()
 	}
 
 	for {
@@ -26,12 +34,11 @@ func main() {
 
 		go handleConn(conn)
 	}
-
 }
 
 func handleConn(conn net.Conn) {
 	for {
-		data, err := ParseResp(conn)
+		data, err := resp.Parse(conn)
 		if err == io.EOF {
 			break
 		}
@@ -41,7 +48,7 @@ func handleConn(conn net.Conn) {
 			return
 		}
 
-		arr, ok := data.(Array)
+		arr, ok := data.(resp.Array)
 		if !ok {
 			fmt.Println("cannot convert cmd to array")
 			conn.Write([]byte("cannot convert cmd to array"))

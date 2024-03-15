@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/codecrafters-io/redis-starter-go/app/resp"
 )
 
 type store struct {
@@ -11,7 +13,7 @@ type store struct {
 }
 
 type redisValue struct {
-	Val CMD
+	Val resp.CMD
 	Ex  time.Time
 }
 
@@ -21,7 +23,7 @@ type SetParam struct {
 	Ex time.Time
 }
 
-func (s *store) Set(k CMD, v CMD, param *SetParam) {
+func (s *store) Set(k resp.CMD, v resp.CMD, param *SetParam) {
 	val := redisValue{Val: v}
 	if param != nil {
 		if !param.Ex.IsZero() {
@@ -33,7 +35,7 @@ func (s *store) Set(k CMD, v CMD, param *SetParam) {
 	s.m.Store(k, val)
 }
 
-func (s *store) Get(k CMD) (value CMD, ok bool) {
+func (s *store) Get(k resp.CMD) (value resp.CMD, ok bool) {
 	v, ok := s.m.Load(k)
 	if !ok {
 		return nil, false
