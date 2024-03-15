@@ -15,7 +15,7 @@ var (
 )
 
 type server struct {
-	Port int
+	Port int64
 }
 
 type replication struct {
@@ -36,7 +36,7 @@ func init() {
 			if err != nil {
 				panic("port is should be int")
 			}
-			Server.Port = int(port)
+			Server.Port = port
 
 		case "--replicaof":
 			host := args[idx+1]

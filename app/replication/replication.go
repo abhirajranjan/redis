@@ -29,6 +29,10 @@ func HandleReplication() {
 		fmt.Println(err)
 		return
 	}
+	if err := replconf(conn); err != nil {
+		fmt.Println(err)
+		return
+	}
 }
 
 func ping(rw io.ReadWriter) error {
@@ -39,6 +43,27 @@ func ping(rw io.ReadWriter) error {
 	_, err := rw.Write(arr.Bytes())
 	if err != nil {
 		return errors.Wrap(err, "ping")
+	}
+
+	cmd, err := resp.Parse(rw)
+	if err != nil {
+		return errors.Wrap(err, "resp.Parse")
+	}
+
+	fmt.Println(strconv.Quote(string(cmd.Bytes())))
+	return nil
+}
+
+func replconf(rw io.ReadWriter) error {
+	arr := resp.Array{
+		resp.BulkString{Str: "REPLCONF"},
+		resp.BulkString{Str: "listening-port"},
+		resp.BulkString{Str: strconv.FormatInt(config.Server.Port, 10)},
+	}
+
+	_, err := rw.Write(arr.Bytes())
+	if err != nil {
+		return errors.Wrap(err, "replconf")
 	}
 
 	cmd, err := resp.Parse(rw)
