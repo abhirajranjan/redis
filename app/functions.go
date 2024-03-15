@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -110,12 +111,19 @@ func info(arr Array, w io.Writer) error {
 		}
 
 		if s == "replication" {
-			str += Replication.String()
+			str += repl()
 		}
 	}
 
 	_, err := w.Write(BulkString{string: str}.Bytes())
 	return err
+}
+
+func repl() string {
+	b := strings.Builder{}
+	b.WriteString("# Replication\n")
+	b.WriteString(fmt.Sprintf("role:%s\n", Config.Replication.Role))
+	return b.String()
 }
 
 func parseSetParam(key, val CMD, p *SetParam) error {

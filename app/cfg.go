@@ -1,78 +1,57 @@
 package main
 
 import (
-	"fmt"
-	"reflect"
+	"os"
 	"strconv"
-	"strings"
-
-	"github.com/pkg/errors"
 )
 
 type Role string
 
 var (
-	RoleMaster  Role        = "master"
-	RoleSlave   Role        = "slave"
-	Replication replication = replication{Role: RoleMaster}
+	RoleMaster Role = "master"
+	RoleSlave  Role = "slave"
+	Config     config
 )
+
+type config struct {
+	Replication replication
+	Server      server
+}
+
+type server struct {
+	Port int
+}
 
 type replication struct {
 	Role Role `resp:"role"`
-	host string
-	port int
+	Host string
+	Port int
 }
 
-func (r *replication) Set(s string) error {
-	b, a, _ := strings.Cut(s, " ")
-	port, err := strconv.ParseInt(a, 10, 64)
-	if err != nil {
-		return errors.New("replica port should be int")
+func init() {
+	Config.Server.Port = 6379
+	Config.Replication.Role = RoleMaster
+
+	args := os.Args[1:]
+	for idx, v := range args {
+		switch v {
+		case "--port":
+			port, err := strconv.ParseInt(args[idx+1], 10, 64)
+			if err != nil {
+				panic("port is should be int")
+			}
+			Config.Server.Port = int(port)
+
+		case "--replicaof":
+			host := args[idx+1]
+			port, err := strconv.ParseInt(args[idx+2], 10, 64)
+			if err != nil {
+				panic("port is should be int")
+			}
+
+			Config.Replication.Role = RoleSlave
+			Config.Replication.Host = host
+			Config.Replication.Port = int(port)
+		}
 	}
-
-	r.host = b
-	r.port = int(port)
-	r.Role = RoleSlave
-	return nil
-}
-
-func (r replication) String() string {
-	b := strings.Builder{}
-	b.WriteString("# Replication")
-
-	rv := reflect.ValueOf(r)
-	rt := reflect.TypeOf(r)
-
-	var (
-		key string
-		val string
-	)
-
-	for i := 0; i < rv.NumField(); i++ {
-		fv := rv.Field(i)
-		ft := rt.Field(i)
-
-		if !ft.IsExported() {
-			continue
-		}
-		tg, ok := rt.Field(i).Tag.Lookup("resp")
-		if !ok {
-			continue
-		}
-
-		key = tg
-
-		switch fv.Kind() {
-		case reflect.String:
-			val = fv.String()
-
-		case reflect.Int:
-			valInt := fv.Int()
-			val = strconv.FormatInt(valInt, 10)
-		}
-
-		b.WriteString(fmt.Sprintf("\n%s:%s\n", key, val))
-	}
-
-	return b.String()
 }
