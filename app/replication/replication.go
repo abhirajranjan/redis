@@ -1,141 +1,50 @@
 package replication
 
-import (
-	"fmt"
-	"io"
-	"net"
-	"strconv"
+import "fmt"
 
-	"github.com/codecrafters-io/redis-starter-go/app/config"
-	"github.com/codecrafters-io/redis-starter-go/app/resp"
-	"github.com/pkg/errors"
-)
-
-func HandleReplication() {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", config.Replication.Host+":"+strconv.FormatInt(config.Replication.Port, 10))
-	if err != nil {
-		fmt.Println(err, "ResolveTCPAddr failed")
-		return
-	}
-
-	conn, err := net.DialTCP("tcp", nil, tcpAddr)
-	if err != nil {
-		fmt.Println(err, "Dial failed")
-		return
-	}
-	defer conn.Close()
-
-	if err := ping(conn); err != nil {
-		fmt.Println(err)
-		return
-	}
-	if err := replconf(conn); err != nil {
-		fmt.Println(err)
-		return
-	}
-	if err := psync(conn); err != nil {
-		fmt.Println(err)
-		return
-	}
+type Replication[T any] struct {
+	subscriberMap map[chan T]struct{}
+	sub           chan chan T
+	pub           chan T
+	unsub         chan chan T
 }
 
-func ping(rw io.ReadWriter) error {
-	arr := resp.Array{
-		resp.BulkString{Str: "PING"},
-	}
+func (r *Replication[T]) Init() {
+	r.subscriberMap = map[chan T]struct{}{}
+	r.sub = make(chan chan T)
+	r.pub = make(chan T)
+	r.unsub = make(chan chan T)
 
-	_, err := rw.Write(arr.Bytes())
-	if err != nil {
-		return errors.Wrap(err, "ping")
-	}
-
-	cmd, err := resp.Parse(rw)
-	if err != nil {
-		return errors.Wrap(err, "resp.Parse")
-	}
-
-	fmt.Println(strconv.Quote(string(cmd.Bytes())))
-	return nil
-}
-func replconf(rw io.ReadWriter) error {
-	arr := resp.Array{
-		resp.BulkString{Str: "REPLCONF"},
-		resp.BulkString{Str: "listening-port"},
-		resp.BulkString{Str: strconv.FormatInt(config.Server.Port, 10)},
-	}
-
-	_, err := rw.Write(arr.Bytes())
-	if err != nil {
-		return errors.Wrap(err, "replconf")
-	}
-
-	cmd, err := resp.Parse(rw)
-	if err != nil {
-		return errors.Wrap(err, "resp.Parse")
-	}
-
-	fmt.Println(strconv.Quote(string(cmd.Bytes())))
-
-	arr = resp.Array{
-		resp.BulkString{Str: "REPLCONF"},
-		resp.BulkString{Str: "capa"},
-		resp.BulkString{Str: "eof"},
-		resp.BulkString{Str: "capa"},
-		resp.BulkString{Str: "psync2"},
-	}
-
-	_, err = rw.Write(arr.Bytes())
-	if err != nil {
-		return errors.Wrap(err, "replconf")
-	}
-
-	cmd, err = resp.Parse(rw)
-	if err != nil {
-		return errors.Wrap(err, "resp.Parse")
-	}
-
-	fmt.Println(strconv.Quote(string(cmd.Bytes())))
-	return nil
+	go func() {
+		for {
+			select {
+			case c := <-r.sub:
+				r.subscriberMap[c] = struct{}{}
+			case data := <-r.pub:
+				for ch := range r.subscriberMap {
+					go func(c chan T) {
+						fmt.Printf("sending data on chan %v\n", c)
+						c <- data
+					}(ch)
+				}
+			case ch := <-r.unsub:
+				close(ch)
+				delete(r.subscriberMap, ch)
+			}
+		}
+	}()
 }
 
-func psync(rw io.ReadWriter) error {
-	arr := resp.Array{
-		resp.BulkString{Str: "PSYNC"},
-		resp.BulkString{Str: "?"},
-		resp.BulkString{Str: "-1"},
-	}
+func (r *Replication[T]) Publish(data T) {
+	r.pub <- data
+}
 
-	_, err := rw.Write(arr.Bytes())
-	if err != nil {
-		return errors.Wrap(err, "psync")
-	}
+func (r *Replication[T]) Subscribe() chan T {
+	c := make(chan T, 1024)
+	r.sub <- c
+	return c
+}
 
-	cmd, err := resp.Parse(rw)
-	if err != nil {
-		return errors.Wrap(err, "resp.Parse")
-	}
-
-	fmt.Println(strconv.Quote(string(cmd.Bytes())))
-
-	var b [1]byte
-	if _, err := rw.Read(b[:]); err != nil {
-		return errors.Wrap(err, "error reading rdb first byte")
-	}
-
-	if b[0] != '$' {
-		return errors.New("expecting $ prefix")
-	}
-
-	len, err := resp.ParseInt(rw)
-	if err != nil {
-		return errors.New("expecting int")
-	}
-
-	bin := make([]byte, len)
-	if _, err := rw.Read(bin); err != nil {
-		return errors.Wrap(err, "error reading rdb")
-	}
-
-	fmt.Println(bin)
-	return nil
+func (r *Replication[T]) Unsubscribe(c chan T) {
+	r.unsub <- c
 }

@@ -1,21 +1,22 @@
-package main
+package server
 
 import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/app/config"
 	"github.com/codecrafters-io/redis-starter-go/app/resp"
+	"github.com/codecrafters-io/redis-starter-go/app/store"
 	"github.com/pkg/errors"
 )
 
 var ErrUnknownCMD = errors.New("unknown command")
 
-func HandleFunc(args resp.Array, w io.Writer) error {
+func (s server) handleFunc(args resp.Array, w io.Writer) error {
 	if len(args) < 1 {
 		return ErrUnknownCMD
 	}
@@ -28,29 +29,29 @@ func HandleFunc(args resp.Array, w io.Writer) error {
 	args = args[1:]
 	switch strings.ToLower(cmd) {
 	case "ping":
-		return ping(args, w)
+		return s.ping(args, w)
 	case "echo":
-		return echo(args, w)
+		return s.echo(args, w)
 	case "get":
-		return get(args, w)
+		return s.get(args, w)
 	case "set":
-		return set(args, w)
+		return s.set(args, w)
 	case "info":
-		return info(args, w)
+		return s.info(args, w)
 	case "replconf":
-		return replconf(args, w)
+		return s.replconf(args, w)
 	case "psync":
-		return psync(args, w)
+		return s.psync(args, w)
 	}
 	return errors.WithMessagef(ErrUnknownCMD, "%s", args[0])
 }
 
-func ping(_ resp.Array, w io.Writer) error {
+func (s *server) ping(_ resp.Array, w io.Writer) error {
 	_, err := w.Write(resp.BulkString{Str: "PONG"}.Bytes())
 	return err
 }
 
-func echo(arr resp.Array, w io.Writer) error {
+func (s *server) echo(arr resp.Array, w io.Writer) error {
 	if len(arr) == 0 {
 		_, err := w.Write(resp.SimpleString("").Bytes())
 		return err
@@ -65,14 +66,14 @@ func echo(arr resp.Array, w io.Writer) error {
 	return err
 }
 
-func get(arr resp.Array, w io.Writer) error {
+func (s *server) get(arr resp.Array, w io.Writer) error {
 	if len(arr) != 1 {
 		err := errors.New("ERR only 1 arg needed")
 		w.Write(resp.SimpleError(err.Error()).Bytes())
 		return err
 	}
 
-	val, ok := Store.Get(arr[0])
+	val, ok := s.store.Get(arr[0])
 	if !ok {
 		if _, err := w.Write(resp.BulkString{IsNull: true}.Bytes()); err != nil {
 			return err
@@ -84,8 +85,8 @@ func get(arr resp.Array, w io.Writer) error {
 	return err
 }
 
-func set(arr resp.Array, w io.Writer) error {
-	param := SetParam{}
+func (s *server) set(arr resp.Array, w io.Writer) error {
+	param := store.SetParam{}
 	if len(arr) < 2 {
 		err := errors.New("ERR k,v args needed")
 		w.Write(resp.SimpleError(err.Error()).Bytes())
@@ -99,12 +100,12 @@ func set(arr resp.Array, w io.Writer) error {
 		}
 	}
 
-	Store.Set(arr[0], arr[1], &param)
+	s.store.Set(arr[0], arr[1], &param)
 	_, err := w.Write(resp.SimpleString("OK").Bytes())
 	return err
 }
 
-func info(arr resp.Array, w io.Writer) error {
+func (srv *server) info(arr resp.Array, w io.Writer) error {
 	str := ""
 	if len(arr) == 0 {
 		arr = append(arr, resp.SimpleString("replication"))
@@ -119,7 +120,7 @@ func info(arr resp.Array, w io.Writer) error {
 		}
 
 		if s == "replication" {
-			str += repl()
+			str += srv.repl()
 		}
 	}
 
@@ -127,7 +128,7 @@ func info(arr resp.Array, w io.Writer) error {
 	return err
 }
 
-func repl() string {
+func (s *server) repl() string {
 	b := strings.Builder{}
 	b.WriteString("# Replication\n")
 	b.WriteString(fmt.Sprintf("role:%s\n", config.Replication.Role))
@@ -136,7 +137,7 @@ func repl() string {
 	return b.String()
 }
 
-func parseSetParam(key, val resp.CMD, p *SetParam) error {
+func parseSetParam(key, val resp.CMD, p *store.SetParam) error {
 	k, ok := String(key)
 	if !ok {
 		return errors.Errorf("ERR %s not string", key)
@@ -162,7 +163,7 @@ func parseSetParam(key, val resp.CMD, p *SetParam) error {
 	}
 }
 
-func replconf(arr resp.Array, w io.Writer) error {
+func (s *server) replconf(arr resp.Array, w io.Writer) error {
 	if len(arr) < 1 {
 		w.Write(resp.SimpleError("ERR incorrect number of arguments").Bytes())
 		return nil
@@ -192,7 +193,7 @@ func replconf(arr resp.Array, w io.Writer) error {
 	return nil
 }
 
-func psync(arr resp.Array, w io.Writer) error {
+func (s *server) psync(arr resp.Array, w io.Writer) error {
 	if len(arr) < 2 {
 		w.Write(resp.SimpleError("ERR incorrect number of arguments").Bytes())
 		return nil
@@ -227,36 +228,24 @@ func psync(arr resp.Array, w io.Writer) error {
 		panic(err)
 	}
 
+	ch := s.replication.Subscribe()
+
 	wbin := []byte(fmt.Sprintf("$%d\r\n", len(bin)))
 	wbin = append(wbin, bin...)
 	w.Write(wbin)
-	return nil
-}
 
-func String(val resp.CMD) (string, bool) {
-	switch v := val.(type) {
-	case resp.SimpleString:
-		return string(v), true
-	case resp.BulkString:
-		return v.Str, true
-	default:
-		return "", false
-	}
-}
+	for {
+		data := <-ch
+		if _, err := w.Write(data); err != nil {
+			if errors.Is(err, syscall.ECONNRESET) {
+				fmt.Println("unsub")
+				s.replication.Unsubscribe(ch)
+				break
+			}
 
-func Int(val resp.CMD) (int64, bool) {
-	if v, ok := val.(resp.Int); ok {
-		return int64(v), true
-	}
-
-	cmd, ok := String(val)
-	if ok {
-		i, err := strconv.ParseInt(cmd, 10, 64)
-		if err != nil {
-			return 0, false
+			fmt.Println("error replicating:", err)
 		}
-		return i, true
 	}
 
-	return 0, false
+	return nil
 }
