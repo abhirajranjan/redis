@@ -30,6 +30,7 @@ func NewServer() *server {
 		replication: repl,
 		store:       store,
 	}
+
 }
 
 func (s server) Run() {
