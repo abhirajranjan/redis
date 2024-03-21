@@ -79,6 +79,8 @@ func (s *server) handleConn(conn net.Conn) {
 		if err := CommandRunner.Run(arr, conn); err != nil {
 			fmt.Println(err)
 		}
+
+		config.BytesProcessed.Add(int64(len(arr.Bytes())))
 	}
 }
 

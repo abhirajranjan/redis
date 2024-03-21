@@ -1,0 +1,10 @@
+./app/command/command.go
+./app/config/cfg.go
+./app/main.go
+./app/replication/replication.go
+./app/replication/slave.go
+./app/resp/helper.go
+./app/resp/parser.go
+./app/server/functions.go
+./app/server/server.go
+./app/store/store.go

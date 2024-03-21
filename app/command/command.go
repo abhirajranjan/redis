@@ -25,7 +25,7 @@ func (f *Command) AddCommand(c *Command) {
 }
 
 func (f *Command) Run(arr resp.Array, w io.Writer) error {
-	if len(f.subCmd) == 0 || len(arr) == 0 {
+	if f.subCmd == nil || len(f.subCmd) == 0 || len(arr) == 0 {
 		return f.RunFn(arr, w)
 	}
 

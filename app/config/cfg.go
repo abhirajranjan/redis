@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"sync/atomic"
 )
 
 type Role string
@@ -12,6 +13,8 @@ var (
 	RoleSlave   Role = "slave"
 	Server      server
 	Replication replication
+
+	BytesProcessed atomic.Int64
 )
 
 type server struct {
