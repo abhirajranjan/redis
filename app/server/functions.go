@@ -81,6 +81,11 @@ func initReplConf(s *server) *command.Command {
 	})
 
 	replConf.AddCommand(&command.Command{
+		Name:  "getack",
+		RunFn: s.replConfGetack,
+	})
+
+	replConf.AddCommand(&command.Command{
 		Name:  "capa",
 		RunFn: s.replConfCapa,
 	})
@@ -231,6 +236,28 @@ func (s *server) replConfListeningPort(arr resp.Array, w io.Writer) error {
 
 func (s *server) replConfCapa(arr resp.Array, w io.Writer) error {
 	w.Write(resp.SimpleString("OK").Bytes())
+	return nil
+}
+
+func (s *server) replConfGetack(arr resp.Array, w io.Writer) error {
+	if len(arr) == 0 {
+		return errors.New("expected atleast one args")
+	}
+
+	offset, ok := resp.IsString(arr[0])
+	if !ok {
+		return errors.New("GetAck: expected string arg")
+	}
+
+	if offset == "*" {
+		w.Write(resp.Array{
+			resp.BulkString{Str: "REPLCONF"},
+			resp.BulkString{Str: "ACK"},
+			resp.BulkString{Str: "*"},
+		}.Bytes())
+		return nil
+	}
+
 	return nil
 }
 
