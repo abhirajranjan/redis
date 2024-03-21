@@ -22,10 +22,8 @@ func (r *Replication[T]) Init() {
 				r.subscriberMap[c] = struct{}{}
 			case data := <-r.pub:
 				for ch := range r.subscriberMap {
-					go func(c chan T) {
-						fmt.Printf("sending data on chan %v\n", c)
-						c <- data
-					}(ch)
+					fmt.Printf("sending %v on chan %v\n", data, ch)
+					ch <- data
 				}
 			case ch := <-r.unsub:
 				close(ch)
