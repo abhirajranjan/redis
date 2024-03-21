@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/codecrafters-io/redis-starter-go/app/command"
 	"github.com/codecrafters-io/redis-starter-go/app/config"
 	"github.com/codecrafters-io/redis-starter-go/app/resp"
 	"github.com/codecrafters-io/redis-starter-go/app/store"
@@ -16,34 +17,75 @@ import (
 
 var ErrUnknownCMD = errors.New("unknown command")
 
-func (s server) handleFunc(args resp.Array, w io.Writer) error {
-	if len(args) < 1 {
-		return ErrUnknownCMD
+var CommandRunner = command.Command{
+	RunFn: func(_ resp.Array, w io.Writer) error {
+		err := errors.New("invalid Command")
+		w.Write(resp.SimpleError(err.Error()).Bytes())
+		return err
+	},
+}
+
+func initCommands(s *server) {
+	CommandRunner.AddCommand(&command.Command{
+		Name:  "ping",
+		RunFn: s.ping,
+	})
+
+	CommandRunner.AddCommand(&command.Command{
+		Name:  "echo",
+		RunFn: s.echo,
+	})
+
+	CommandRunner.AddCommand(&command.Command{
+		Name:  "get",
+		RunFn: s.get,
+	})
+
+	CommandRunner.AddCommand(&command.Command{
+		Name:  "set",
+		RunFn: s.set,
+	})
+
+	CommandRunner.AddCommand(initInfo(s))
+	CommandRunner.AddCommand(initReplConf(s))
+
+	CommandRunner.AddCommand(&command.Command{
+		Name:  "psync",
+		RunFn: s.psync,
+	})
+}
+
+func initInfo(s *server) *command.Command {
+	info := command.Command{
+		Name:  "info",
+		RunFn: s.info,
 	}
 
-	cmd, ok := String(args[0])
-	if !ok {
-		return errors.WithMessagef(ErrUnknownCMD, "'%s' error casting to string", args[0])
+	info.AddCommand(&command.Command{
+		Name:  "replication",
+		RunFn: s.infoReplication,
+	})
+
+	return &info
+}
+
+func initReplConf(s *server) *command.Command {
+	replConf := command.Command{
+		Name:  "replconf",
+		RunFn: s.replconf,
 	}
 
-	args = args[1:]
-	switch strings.ToLower(cmd) {
-	case "ping":
-		return s.ping(args, w)
-	case "echo":
-		return s.echo(args, w)
-	case "get":
-		return s.get(args, w)
-	case "set":
-		return s.set(args, w)
-	case "info":
-		return s.info(args, w)
-	case "replconf":
-		return s.replconf(args, w)
-	case "psync":
-		return s.psync(args, w)
-	}
-	return errors.WithMessagef(ErrUnknownCMD, "%s", args[0])
+	replConf.AddCommand(&command.Command{
+		Name:  "listening-port",
+		RunFn: s.replConfListeningPort,
+	})
+
+	replConf.AddCommand(&command.Command{
+		Name:  "capa",
+		RunFn: s.replConfCapa,
+	})
+
+	return &replConf
 }
 
 func (s *server) ping(_ resp.Array, w io.Writer) error {
@@ -85,6 +127,32 @@ func (s *server) get(arr resp.Array, w io.Writer) error {
 	return err
 }
 
+func parseSetParam(key, val resp.CMD, p *store.SetParam) error {
+	k, ok := resp.IsString(key)
+	if !ok {
+		return errors.Errorf("ERR %s not string", key)
+	}
+
+	v, ok := resp.IsString(val)
+	if !ok {
+		return errors.Errorf("ERR %s not string", val)
+	}
+
+	k = strings.ToLower(k)
+	switch k {
+	case "px":
+		d, err := time.ParseDuration(v + "ms")
+		if err != nil {
+			return errors.Errorf("ERR %s invalid duration", v)
+		}
+		p.Ex = time.Now().Add(d)
+		return nil
+
+	default:
+		return errors.Errorf("ERR invalid param %s", k)
+	}
+}
+
 func (s *server) set(arr resp.Array, w io.Writer) error {
 	param := store.SetParam{}
 	if len(arr) < 2 {
@@ -106,90 +174,63 @@ func (s *server) set(arr resp.Array, w io.Writer) error {
 }
 
 func (srv *server) info(arr resp.Array, w io.Writer) error {
-	str := ""
-	if len(arr) == 0 {
-		arr = append(arr, resp.SimpleString("replication"))
+	builder := strings.Builder{}
+	if err := srv.infoReplicationString(&builder); err != nil {
+		return errors.Wrap(err, "info")
 	}
 
-	for _, v := range arr {
-		s, ok := String(v)
-		if !ok {
-			err := errors.New("ERR require string type")
-			w.Write(resp.SimpleError(err.Error()).Bytes())
-			return err
-		}
-
-		if s == "replication" {
-			str += srv.repl()
-		}
-	}
-
-	_, err := w.Write(resp.BulkString{Str: str}.Bytes())
+	_, err := w.Write(resp.BulkString{Str: builder.String()}.Bytes())
 	return err
 }
 
-func (s *server) repl() string {
-	b := strings.Builder{}
-	b.WriteString("# Replication\n")
-	b.WriteString(fmt.Sprintf("role:%s\n", config.Replication.Role))
-	b.WriteString(fmt.Sprintf("master_replid:%s\n", config.Replication.MasterReplId))
-	b.WriteString(fmt.Sprintf("master_repl_offset:%d\n", config.Replication.MasterReplOffset))
-	return b.String()
+func (s *server) infoReplication(arr resp.Array, w io.Writer) error {
+	builder := strings.Builder{}
+	if err := s.infoReplicationString(&builder); err != nil {
+		return err
+	}
+
+	_, err := w.Write(resp.BulkString{Str: builder.String()}.Bytes())
+	return err
 }
 
-func parseSetParam(key, val resp.CMD, p *store.SetParam) error {
-	k, ok := String(key)
-	if !ok {
-		return errors.Errorf("ERR %s not string", key)
+func (s *server) infoReplicationString(w io.Writer) error {
+	if _, err := io.WriteString(w, "# Replication\n"); err != nil {
+		return errors.Wrap(err, "replication")
 	}
 
-	v, ok := String(val)
-	if !ok {
-		return errors.Errorf("ERR %s not string", val)
+	if _, err := io.WriteString(w, fmt.Sprintf("role:%s\n", config.Replication.Role)); err != nil {
+		return errors.Wrap(err, "replication")
 	}
 
-	k = strings.ToLower(k)
-	switch k {
-	case "px":
-		d, err := time.ParseDuration(v + "ms")
-		if err != nil {
-			return errors.Errorf("ERR %s invalid duration", v)
-		}
-		p.Ex = time.Now().Add(d)
-		return nil
-
-	default:
-		return errors.Errorf("ERR invalid param %s", k)
+	if _, err := io.WriteString(w, fmt.Sprintf("master_replid:%s\n", config.Replication.MasterReplId)); err != nil {
+		return errors.Wrap(err, "replication")
 	}
+
+	if _, err := io.WriteString(w, fmt.Sprintf("master_repl_offset:%d\n", config.Replication.MasterReplOffset)); err != nil {
+		return errors.Wrap(err, "replication")
+	}
+
+	return nil
 }
 
 func (s *server) replconf(arr resp.Array, w io.Writer) error {
+	w.Write(resp.SimpleError("ERR incorrect number of arguments").Bytes())
+	return nil
+}
+
+func (s *server) replConfListeningPort(arr resp.Array, w io.Writer) error {
 	if len(arr) < 1 {
 		w.Write(resp.SimpleError("ERR incorrect number of arguments").Bytes())
 		return nil
 	}
 
-	cmd, ok := String(arr[0])
-	if !ok {
-		err := errors.Errorf("ERR expected string type %s", arr[0])
-		w.Write(resp.SimpleError(err.Error()).Bytes())
-		return err
-	}
-	switch strings.ToLower(cmd) {
-	case "listening-port":
-		if len(arr) < 2 {
-			w.Write(resp.SimpleError("ERR incorrect number of arguments").Bytes())
-			return nil
-		}
+	fmt.Println("port", arr[0])
+	w.Write(resp.SimpleString("OK").Bytes())
+	return nil
+}
 
-		fmt.Println("port", arr[1])
-		w.Write(resp.SimpleString("OK").Bytes())
-		return nil
-
-	case "capa":
-		w.Write(resp.SimpleString("OK").Bytes())
-		return nil
-	}
+func (s *server) replConfCapa(arr resp.Array, w io.Writer) error {
+	w.Write(resp.SimpleString("OK").Bytes())
 	return nil
 }
 
@@ -199,14 +240,14 @@ func (s *server) psync(arr resp.Array, w io.Writer) error {
 		return nil
 	}
 
-	replid, ok := String(arr[0])
+	replid, ok := resp.IsString(arr[0])
 	if !ok {
 		err := errors.Errorf("ERR expected string type %s", arr[0])
 		w.Write(resp.SimpleError(err.Error()).Bytes())
 		return err
 	}
 
-	offset, ok := Int(arr[1])
+	offset, ok := resp.IsInt(arr[1])
 	if !ok {
 		err := errors.Errorf("ERR expected int type %s", arr[1])
 		w.Write(resp.SimpleError(err.Error()).Bytes())

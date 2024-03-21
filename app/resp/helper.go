@@ -1,28 +1,28 @@
-package server
+package resp
 
 import (
 	"strconv"
-
-	"github.com/codecrafters-io/redis-starter-go/app/resp"
 )
 
-func String(val resp.CMD) (string, bool) {
+func IsString(val CMD) (string, bool) {
 	switch v := val.(type) {
-	case resp.SimpleString:
+	case SimpleString:
 		return string(v), true
-	case resp.BulkString:
+	case BulkString:
 		return v.Str, true
+	case Int:
+		return strconv.FormatInt(int64(v), 10), true
 	default:
 		return "", false
 	}
 }
 
-func Int(val resp.CMD) (int64, bool) {
-	if v, ok := val.(resp.Int); ok {
+func IsInt(val CMD) (int64, bool) {
+	if v, ok := val.(Int); ok {
 		return int64(v), true
 	}
 
-	cmd, ok := String(val)
+	cmd, ok := IsString(val)
 	if ok {
 		i, err := strconv.ParseInt(cmd, 10, 64)
 		if err != nil {

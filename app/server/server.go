@@ -25,15 +25,16 @@ func NewServer() *server {
 	repl.Init()
 
 	store := store.NewStore()
-
-	return &server{
+	s := &server{
 		replication: repl,
 		store:       store,
 	}
 
+	initCommands(s)
+	return s
 }
 
-func (s server) Run() {
+func (s *server) Run() {
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", config.Server.Port))
 	if err != nil {
 		fmt.Println("Failed to bind to port 6379")
@@ -54,7 +55,7 @@ func (s server) Run() {
 	}
 }
 
-func (s server) handleConn(conn net.Conn) {
+func (s *server) handleConn(conn net.Conn) {
 	defer conn.Close()
 	for {
 		data, err := resp.Parse(conn)
@@ -74,7 +75,8 @@ func (s server) handleConn(conn net.Conn) {
 
 		fmt.Println("handle: ", strconv.Quote(string(arr.Bytes())))
 		s.publishMessage(arr)
-		if err := s.handleFunc(arr, conn); err != nil {
+
+		if err := CommandRunner.Run(arr, conn); err != nil {
 			fmt.Println(err)
 		}
 	}
@@ -96,7 +98,7 @@ func iswriteCMD(cmd resp.Array) bool {
 		return false
 	}
 
-	s, ok := String(cmd[0])
+	s, ok := resp.IsString(cmd[0])
 	if !ok {
 		return false
 	}
