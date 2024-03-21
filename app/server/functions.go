@@ -253,7 +253,7 @@ func (s *server) replConfGetack(arr resp.Array, w io.Writer) error {
 		w.Write(resp.Array{
 			resp.BulkString{Str: "REPLCONF"},
 			resp.BulkString{Str: "ACK"},
-			resp.BulkString{Str: "*"},
+			resp.BulkString{Str: "0"},
 		}.Bytes())
 		return nil
 	}
