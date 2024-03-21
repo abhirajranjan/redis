@@ -25,6 +25,7 @@ func (r *Replication[T]) Init() {
 					fmt.Printf("sending %v on chan %v\n", data, ch)
 					ch <- data
 				}
+
 			case ch := <-r.unsub:
 				close(ch)
 				delete(r.subscriberMap, ch)
