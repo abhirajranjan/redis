@@ -86,7 +86,7 @@ func initReplConf[T ~[]byte](s *CommandHandler[T]) *command.Command {
 }
 
 func (s *CommandHandler[T]) ping(_ resp.Array, w io.Writer) error {
-	_, err := w.Write(resp.Array{resp.BulkString{Str: "PONG"}}.Bytes())
+	_, err := w.Write(resp.BulkString{Str: "PONG"}.Bytes())
 	return err
 }
 

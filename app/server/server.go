@@ -52,17 +52,33 @@ func (s *server) Run() {
 		os.Exit(1)
 	}
 
-	if s.stateConfig.ReplicationRole() == config.RoleSlave {
-		go s.initSlave()
+	if s.stateConfig.ReplicationRole() != config.RoleSlave && s.stateConfig.ReplicationRole() != config.RoleMaster {
+		fmt.Println("incorrect replication provided, starting as master")
+		s.stateConfig.Replication.Role = config.RoleMaster
 	}
 
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			fmt.Println("Error accepting connection: ", err.Error())
+	switch s.stateConfig.ReplicationRole() {
+	case config.RoleMaster:
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				fmt.Println("Error accepting connection: ", err.Error())
+			}
+
+			go s.handleMasterConn(conn)
 		}
 
-		go s.handleMasterConn(conn)
+	case config.RoleSlave:
+		go s.initSlave()
+
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				fmt.Println("Error accepting connection: ", err.Error())
+			}
+
+			go s.handleSlaveConn(conn)
+		}
 	}
 }
 
