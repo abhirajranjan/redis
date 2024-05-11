@@ -258,7 +258,7 @@ func (s *server) replConfGetack(arr resp.Array, w io.Writer) error {
 			resp.BulkString{Str: strconv.FormatInt(s.bytesProcessed.Load(), 10)},
 		}.Bytes()
 
-		fmt.Println(string(b))
+		fmt.Println(strconv.Quote(string(b)))
 		w.Write(b)
 		return nil
 	}
