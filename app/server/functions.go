@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/app/command"
-	"github.com/codecrafters-io/redis-starter-go/app/config"
 	"github.com/codecrafters-io/redis-starter-go/app/resp"
 	"github.com/codecrafters-io/redis-starter-go/app/store"
 	"github.com/pkg/errors"
@@ -18,15 +17,15 @@ import (
 
 var ErrUnknownCMD = errors.New("unknown command")
 
-var CommandRunner = command.Command{
-	RunFn: func(_ resp.Array, w io.Writer) error {
-		err := errors.New("invalid Command")
-		w.Write(resp.SimpleError(err.Error()).Bytes())
-		return err
-	},
-}
+func (s *server) commandRunner() command.Command {
+	CommandRunner := command.Command{
+		RunFn: func(_ resp.Array, w io.Writer) error {
+			err := errors.New("invalid Command")
+			w.Write(resp.SimpleError(err.Error()).Bytes())
+			return err
+		},
+	}
 
-func initCommands(s *server) {
 	CommandRunner.AddCommand(&command.Command{
 		Name:  "ping",
 		RunFn: s.ping,
@@ -54,6 +53,8 @@ func initCommands(s *server) {
 		Name:  "psync",
 		RunFn: s.psync,
 	})
+
+	return CommandRunner
 }
 
 func initInfo(s *server) *command.Command {
@@ -204,15 +205,15 @@ func (s *server) infoReplicationString(w io.Writer) error {
 		return errors.Wrap(err, "replication")
 	}
 
-	if _, err := io.WriteString(w, fmt.Sprintf("role:%s\n", config.Replication.Role)); err != nil {
+	if _, err := io.WriteString(w, fmt.Sprintf("role:%s\n", s.config.Replication.Role)); err != nil {
 		return errors.Wrap(err, "replication")
 	}
 
-	if _, err := io.WriteString(w, fmt.Sprintf("master_replid:%s\n", config.Replication.MasterReplId)); err != nil {
+	if _, err := io.WriteString(w, fmt.Sprintf("master_replid:%s\n", s.config.Replication.MasterReplId)); err != nil {
 		return errors.Wrap(err, "replication")
 	}
 
-	if _, err := io.WriteString(w, fmt.Sprintf("master_repl_offset:%d\n", config.Replication.MasterReplOffset)); err != nil {
+	if _, err := io.WriteString(w, fmt.Sprintf("master_repl_offset:%d\n", s.config.Replication.MasterReplOffset)); err != nil {
 		return errors.Wrap(err, "replication")
 	}
 
@@ -254,7 +255,7 @@ func (s *server) replConfGetack(arr resp.Array, w io.Writer) error {
 		w.Write(resp.Array{
 			resp.BulkString{Str: "REPLCONF"},
 			resp.BulkString{Str: "ACK"},
-			resp.BulkString{Str: strconv.FormatInt(config.BytesProcessed.Load(), 10)},
+			resp.BulkString{Str: strconv.FormatInt(s.bytesProcessed.Load(), 10)},
 		}.Bytes())
 		return nil
 	}
@@ -283,11 +284,11 @@ func (s *server) psync(arr resp.Array, w io.Writer) error {
 	}
 
 	if replid == "?" {
-		replid = config.Replication.MasterReplId
+		replid = s.config.Replication.MasterReplId
 	}
 
 	if offset == -1 {
-		offset = int64(config.Replication.MasterReplOffset)
+		offset = int64(s.config.Replication.MasterReplOffset)
 	}
 
 	w.Write(resp.SimpleString(fmt.Sprintf("FULLRESYNC %s %d", replid, offset)).Bytes())

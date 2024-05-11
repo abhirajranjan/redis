@@ -6,13 +6,26 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/codecrafters-io/redis-starter-go/app/config"
 	"github.com/codecrafters-io/redis-starter-go/app/resp"
 	"github.com/pkg/errors"
 )
 
-func InitSlave(fnCMD func(net.Conn)) {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", config.Replication.Host+":"+strconv.FormatInt(config.Replication.Port, 10))
+type SlaveConfig struct {
+	FnCmd func(net.Conn)
+	Host  string
+	Port  string
+}
+
+type slave struct {
+	*SlaveConfig
+}
+
+func InitSlave(config *SlaveConfig) {
+	slave := slave{
+		SlaveConfig: config,
+	}
+
+	tcpAddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(config.Host, config.Port))
 	if err != nil {
 		panic(errors.Wrap(err, "ResolveTCPAddr failed"))
 	}
@@ -22,26 +35,26 @@ func InitSlave(fnCMD func(net.Conn)) {
 		panic(errors.Wrap(err, "Dial failed"))
 	}
 
-	if err := ping(conn); err != nil {
+	if err := slave.ping(conn); err != nil {
 		fmt.Println(err)
 		conn.Close()
 		return
 	}
-	if err := replconf(conn); err != nil {
+	if err := slave.replconf(conn); err != nil {
 		fmt.Println(err)
 		conn.Close()
 		return
 	}
-	if err := psync(conn); err != nil {
+	if err := slave.psync(conn); err != nil {
 		fmt.Println(err)
 		conn.Close()
 		return
 	}
 
-	fnCMD(conn)
+	config.FnCmd(conn)
 }
 
-func ping(rw io.ReadWriter) error {
+func (s *slave) ping(rw io.ReadWriter) error {
 	arr := resp.Array{
 		resp.BulkString{Str: "PING"},
 	}
@@ -60,11 +73,11 @@ func ping(rw io.ReadWriter) error {
 	return nil
 }
 
-func replconf(rw io.ReadWriter) error {
+func (s *slave) replconf(rw io.ReadWriter) error {
 	arr := resp.Array{
 		resp.BulkString{Str: "REPLCONF"},
 		resp.BulkString{Str: "listening-port"},
-		resp.BulkString{Str: strconv.FormatInt(config.Server.Port, 10)},
+		resp.BulkString{Str: s.Port},
 	}
 
 	_, err := rw.Write(arr.Bytes())
@@ -101,7 +114,7 @@ func replconf(rw io.ReadWriter) error {
 	return nil
 }
 
-func psync(rw io.ReadWriter) error {
+func (s *slave) psync(rw io.ReadWriter) error {
 	arr := resp.Array{
 		resp.BulkString{Str: "PSYNC"},
 		resp.BulkString{Str: "?"},

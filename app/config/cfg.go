@@ -2,59 +2,60 @@ package config
 
 import (
 	"os"
-	"strconv"
-	"sync/atomic"
 )
 
 type Role string
 
 var (
-	RoleMaster  Role = "master"
-	RoleSlave   Role = "slave"
-	Server      server
-	Replication replication
-
-	BytesProcessed atomic.Int64
+	RoleMaster Role = "master"
+	RoleSlave  Role = "slave"
 )
 
-type server struct {
-	Port int64
+type Config struct {
+	Server
+	Replication
 }
 
-type replication struct {
+type Server struct {
+	Port string
+}
+
+type Replication struct {
 	Role             Role `resp:"role"`
 	Host             string
-	Port             int64
+	Port             string
 	MasterReplId     string
 	MasterReplOffset int
 }
 
-func init() {
-	Server.Port = 6379
-	Replication.Role = RoleMaster
-	Replication.MasterReplId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
-	Replication.MasterReplOffset = 0
+func LoadConfig() *Config {
+	config := &Config{
+		Server: Server{
+			Port: "6379",
+		},
+		Replication: Replication{
+			Role:             RoleMaster,
+			MasterReplId:     "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
+			MasterReplOffset: 0,
+		},
+	}
 
 	args := os.Args[1:]
 	for idx, v := range args {
 		switch v {
 		case "--port":
-			port, err := strconv.ParseInt(args[idx+1], 10, 64)
-			if err != nil {
-				panic("port is should be int")
-			}
-			Server.Port = port
+			port := args[idx+1]
+			config.Server.Port = port
 
 		case "--replicaof":
 			host := args[idx+1]
-			port, err := strconv.ParseInt(args[idx+2], 10, 64)
-			if err != nil {
-				panic("port is should be int")
-			}
+			port := args[idx+2]
 
-			Replication.Role = RoleSlave
-			Replication.Host = host
-			Replication.Port = port
+			config.Replication.Role = RoleSlave
+			config.Replication.Host = host
+			config.Replication.Port = port
 		}
 	}
+
+	return config
 }

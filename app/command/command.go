@@ -37,7 +37,7 @@ func (f *Command) Run(arr resp.Array, w io.Writer) error {
 	s = normalizeString(s)
 	cmd, ok := f.subCmd[s]
 	if !ok {
-		errors.Errorf("invalid command %s", s)
+		return errors.Errorf("invalid command %s", s)
 	}
 
 	return cmd.Run(arr[1:], w)
