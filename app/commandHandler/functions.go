@@ -86,7 +86,7 @@ func initReplConf[T ~[]byte](s *CommandHandler[T]) *command.Command {
 }
 
 func (s *CommandHandler[T]) ping(_ resp.Array, w io.Writer) error {
-	_, err := w.Write(resp.Array{resp.BulkString{Str: "PONG"}}.Bytes())
+	_, err := w.Write(resp.BulkString{Str: "PONG"}.Bytes())
 	return err
 }
 
@@ -248,7 +248,6 @@ func (s *CommandHandler[T]) replConfGetack(arr resp.Array, w io.Writer) error {
 			resp.BulkString{Str: strconv.FormatInt(s.cfg.BytesProcessed(), 10)},
 		}.Bytes()
 
-		fmt.Println(strconv.Quote(string(b)))
 		w.Write(b)
 		return nil
 	}
