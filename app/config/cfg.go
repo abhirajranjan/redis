@@ -12,8 +12,8 @@ var (
 )
 
 type Config struct {
-	Server
-	Replication
+	Server      Server
+	Replication Replication
 }
 
 type Server struct {

@@ -1,61 +1,59 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
-	"sync/atomic"
 
 	"net"
 	"os"
 
-	"github.com/codecrafters-io/redis-starter-go/app/command"
+	"github.com/codecrafters-io/redis-starter-go/app/commandHandler"
 	"github.com/codecrafters-io/redis-starter-go/app/config"
-	"github.com/codecrafters-io/redis-starter-go/app/replication"
-	"github.com/codecrafters-io/redis-starter-go/app/resp"
-	"github.com/codecrafters-io/redis-starter-go/app/store"
+
+	"github.com/codecrafters-io/redis-starter-go/pkg/replication"
+	"github.com/codecrafters-io/redis-starter-go/pkg/resp"
+	"github.com/codecrafters-io/redis-starter-go/pkg/store"
 )
 
+type CmdHandler interface {
+	HandleCmd(conn io.ReadWriter) (arr resp.Array, err error)
+}
+
 type server struct {
-	replication replication.Replication[[]byte]
-	store       *store.Store
-
-	config         *config.Config
-	bytesProcessed atomic.Int64
-
-	cmdRunner command.Command
+	store          *store.Store
+	stateConfig    *serverStateConfig
+	commandHandler CmdHandler
+	replication    replication.Replication[[]byte]
 }
 
 func NewServer(config *config.Config) *server {
-	repl := replication.Replication[[]byte]{}
-	repl.Init()
+	var (
+		store = store.NewStore()
+		repl  = replication.New[[]byte]()
+		cfg   = &serverStateConfig{Config: config}
+	)
 
-	store := store.NewStore()
 	s := &server{
-		replication: repl,
-		store:       store,
-		config:      config,
+		store:          store,
+		commandHandler: commandHandler.NewCommandHandler(store, repl, cfg),
+		stateConfig:    cfg,
 	}
 
-	s.cmdRunner = s.commandRunner()
 	return s
 }
 
 func (s *server) Run() {
-	l, err := net.Listen("tcp", net.JoinHostPort("0.0.0.0", s.config.Server.Port))
+	l, err := net.Listen("tcp", net.JoinHostPort("0.0.0.0", s.stateConfig.Server.Port))
 	if err != nil {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
 
-	if s.config.Replication.Role == config.RoleSlave {
-		go replication.InitSlave(&replication.SlaveConfig{
-			FnCmd:   s.handleConn,
-			Host:    s.config.Replication.Host,
-			Port:    s.config.Replication.Port,
-			AppPort: s.config.Server.Port,
-		})
+	if s.stateConfig.ReplicationRole() == config.RoleSlave {
+		go s.initSlave()
 	}
 
 	for {
@@ -64,45 +62,31 @@ func (s *server) Run() {
 			fmt.Println("Error accepting connection: ", err.Error())
 		}
 
-		go s.handleConn(conn)
+		go s.handleMasterConn(conn)
 	}
 }
 
-func (s *server) handleConn(conn net.Conn) {
+func (s *server) handleMasterConn(conn io.ReadWriteCloser) {
 	defer conn.Close()
+
 	for {
-		data, err := resp.Parse(conn)
-		if err == io.EOF {
+		arr, err := s.commandHandler.HandleCmd(conn)
+		s.stateConfig.bytesProcessed.Add(int64(len(arr.Bytes())))
+
+		if errors.Is(err, commandHandler.ErrConnectionClose) {
 			break
 		}
 		if err != nil {
-			conn.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err)))
+			fmt.Println(err.Error())
 			continue
 		}
 
-		arr, ok := data.(resp.Array)
-		if !ok {
-			fmt.Println("cannot convert cmd to array")
-			conn.Write([]byte(fmt.Sprintf("-ERR %s\r\n", "cannot convert cmd to array")))
-			continue
-		}
-
-		b := arr.Bytes()
-		fmt.Println("handle: ", strconv.Quote(string(b)))
-
-		if err := s.cmdRunner.Run(arr, conn); err != nil {
-			fmt.Println(err)
-			conn.Write([]byte(fmt.Sprintf("-ERR %s\r\n", "unknown command")))
-		} else {
-			s.publishMessage(arr)
-		}
-
-		s.bytesProcessed.Add(int64(len(b)))
+		s.publishMessage(arr)
 	}
 }
 
 func (s *server) publishMessage(cmd resp.Array) {
-	if s.config.Replication.Role != config.RoleMaster {
+	if s.stateConfig.ReplicationRole() != config.RoleMaster {
 		return
 	}
 
