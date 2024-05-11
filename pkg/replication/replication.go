@@ -15,7 +15,7 @@ type replication[T any] struct {
 	unsub         chan chan T
 }
 
-func New[T any]() *replication[T] {
+func New[T any]() Replication[T] {
 	r := &replication[T]{
 		subscriberMap: map[chan T]struct{}{},
 		sub:           make(chan chan T),

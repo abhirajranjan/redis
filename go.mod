@@ -8,6 +8,6 @@
 
 module github.com/codecrafters-io/redis-starter-go
 
-go 1.21
+go 1.19
 
 require github.com/pkg/errors v0.9.1
