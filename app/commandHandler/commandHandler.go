@@ -33,6 +33,7 @@ func NewCommandHandler[T ~[]byte](store *store.Store, replication replication.Re
 	s := &CommandHandler[T]{
 		store:       store,
 		replication: replication,
+		cfg:         cfg,
 
 		cmdRunner: &command.Command{
 			RunFn: func(_ resp.Array, w io.Writer) error {
