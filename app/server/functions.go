@@ -96,7 +96,7 @@ func initReplConf(s *server) *command.Command {
 }
 
 func (s *server) ping(_ resp.Array, w io.Writer) error {
-	_, err := w.Write(resp.BulkString{Str: "PONG"}.Bytes())
+	_, err := w.Write(resp.Array{resp.BulkString{Str: "PONG"}}.Bytes())
 	return err
 }
 
