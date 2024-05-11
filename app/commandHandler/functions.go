@@ -45,6 +45,11 @@ func (s *CommandHandler[T]) initCommandRunner(initalCmd *command.Command) {
 		Name:  "psync",
 		RunFn: s.psync,
 	})
+
+	initalCmd.AddCommand(&command.Command{
+		Name:  "wait",
+		RunFn: s.wait,
+	})
 }
 
 func initInfo[T ~[]byte](s *CommandHandler[T]) *command.Command {
@@ -309,5 +314,26 @@ func (s *CommandHandler[T]) psync(arr resp.Array, w io.Writer) error {
 		}
 	}
 
+	return nil
+}
+
+func (s *CommandHandler[T]) wait(arr resp.Array, w io.Writer) error {
+	a, ok := resp.IsInt(arr[0])
+	if !ok {
+		err := errors.Errorf("ERR expected int type %s", arr[0])
+		w.Write(resp.SimpleError(err.Error()).Bytes())
+		return err
+	}
+
+	b, ok := resp.IsInt(arr[1])
+	if !ok {
+		err := errors.Errorf("ERR expected int type %s", arr[1])
+		w.Write(resp.SimpleError(err.Error()).Bytes())
+		return err
+	}
+
+	fmt.Println(a, b)
+
+	w.Write(resp.Int(0).Bytes())
 	return nil
 }
