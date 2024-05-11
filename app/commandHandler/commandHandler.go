@@ -3,7 +3,6 @@ package commandHandler
 import (
 	"fmt"
 	"io"
-	"strconv"
 
 	"github.com/codecrafters-io/redis-starter-go/app/config"
 	"github.com/codecrafters-io/redis-starter-go/pkg/command"
@@ -65,9 +64,6 @@ func (c *CommandHandler[T]) HandleCmd(conn io.ReadWriter) (arr resp.Array, err e
 		conn.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err.Error())))
 		return nil, err
 	}
-
-	b := arr.Bytes()
-	fmt.Println("handle: ", strconv.Quote(string(b)))
 
 	if err := c.cmdRunner.Run(arr, conn); err != nil {
 		conn.Write([]byte(fmt.Sprintf("-ERR %s\r\n", "unknown command")))
