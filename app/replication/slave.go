@@ -12,8 +12,13 @@ import (
 
 type SlaveConfig struct {
 	FnCmd func(net.Conn)
-	Host  string
-	Port  string
+	// slave host
+	Host string
+	// slave port
+	Port string
+
+	// application port
+	AppPort string
 }
 
 type slave struct {
@@ -77,7 +82,7 @@ func (s *slave) replconf(rw io.ReadWriter) error {
 	arr := resp.Array{
 		resp.BulkString{Str: "REPLCONF"},
 		resp.BulkString{Str: "listening-port"},
-		resp.BulkString{Str: s.Port},
+		resp.BulkString{Str: s.AppPort},
 	}
 
 	_, err := rw.Write(arr.Bytes())

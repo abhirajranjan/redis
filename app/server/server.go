@@ -51,9 +51,10 @@ func (s *server) Run() {
 
 	if s.config.Replication.Role == config.RoleSlave {
 		go replication.InitSlave(&replication.SlaveConfig{
-			FnCmd: s.handleConn,
-			Host:  s.config.Replication.Host,
-			Port:  s.config.Replication.Port,
+			FnCmd:   s.handleConn,
+			Host:    s.config.Replication.Host,
+			Port:    s.config.Replication.Port,
+			AppPort: s.config.Server.Port,
 		})
 	}
 
