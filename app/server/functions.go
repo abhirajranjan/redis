@@ -252,11 +252,14 @@ func (s *server) replConfGetack(arr resp.Array, w io.Writer) error {
 	}
 
 	if offset == "*" {
-		w.Write(resp.Array{
+		b := resp.Array{
 			resp.BulkString{Str: "REPLCONF"},
 			resp.BulkString{Str: "ACK"},
 			resp.BulkString{Str: strconv.FormatInt(s.bytesProcessed.Load(), 10)},
-		}.Bytes())
+		}.Bytes()
+
+		fmt.Println(string(b))
+		w.Write(b)
 		return nil
 	}
 
