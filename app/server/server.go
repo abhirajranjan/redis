@@ -23,7 +23,7 @@ type CmdHandler interface {
 
 type server struct {
 	store          *store.Store
-	stateConfig    *serverStateConfig
+	stateConfig    *serverStateConfig[[]byte]
 	commandHandler CmdHandler
 	replication    replication.Replication[[]byte]
 }
@@ -32,7 +32,7 @@ func NewServer(config *config.Config) *server {
 	var (
 		store = store.NewStore()
 		repl  = replication.New[[]byte]()
-		cfg   = &serverStateConfig{Config: config}
+		cfg   = &serverStateConfig[[]byte]{Config: config, repl: repl}
 	)
 
 	s := &server{

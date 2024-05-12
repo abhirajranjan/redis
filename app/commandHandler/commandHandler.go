@@ -19,6 +19,7 @@ type cfg interface {
 	MasterReplId() string
 	MasterReplOffset() int64
 	BytesProcessed() int64
+	ConnectedReplicas() int64
 }
 
 type CommandHandler[T ~[]byte] struct {

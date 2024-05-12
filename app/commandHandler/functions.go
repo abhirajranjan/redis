@@ -6,7 +6,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/pkg/command"
@@ -296,6 +295,7 @@ func (s *CommandHandler[T]) psync(arr resp.Array, w io.Writer) error {
 	}
 
 	ch := s.replication.Subscribe()
+	defer s.replication.Unsubscribe(ch)
 
 	wbin := []byte(fmt.Sprintf("$%d\r\n", len(bin)))
 	wbin = append(wbin, bin...)
@@ -303,18 +303,12 @@ func (s *CommandHandler[T]) psync(arr resp.Array, w io.Writer) error {
 
 	for {
 		data := <-ch
-		if _, err := w.Write(data); err != nil {
-			if errors.Is(err, syscall.ECONNRESET) {
-				fmt.Println("unsub")
-				s.replication.Unsubscribe(ch)
-				break
-			}
-
+		_, err := w.Write(data)
+		if err != nil {
 			fmt.Println("error replicating:", err)
+			return nil
 		}
 	}
-
-	return nil
 }
 
 func (s *CommandHandler[T]) wait(arr resp.Array, w io.Writer) error {
@@ -333,7 +327,6 @@ func (s *CommandHandler[T]) wait(arr resp.Array, w io.Writer) error {
 	}
 
 	fmt.Println(a, b)
-
-	w.Write(resp.Int(0).Bytes())
+	w.Write(resp.Int(s.cfg.ConnectedReplicas()).Bytes())
 	return nil
 }
