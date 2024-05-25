@@ -16,7 +16,7 @@ import (
 
 var ErrUnknownCMD = errors.New("unknown command")
 
-func (s *CommandHandler[T]) initCommandRunner(initalCmd *command.Command) {
+func (s *CommandHandler) initCommandRunner(initalCmd *command.Command) {
 	initalCmd.AddCommand(&command.Command{
 		Name:  "ping",
 		RunFn: s.ping,
@@ -51,7 +51,7 @@ func (s *CommandHandler[T]) initCommandRunner(initalCmd *command.Command) {
 	})
 }
 
-func initInfo[T ~[]byte](s *CommandHandler[T]) *command.Command {
+func initInfo(s *CommandHandler) *command.Command {
 	info := command.Command{
 		Name:  "info",
 		RunFn: s.info,
@@ -65,7 +65,7 @@ func initInfo[T ~[]byte](s *CommandHandler[T]) *command.Command {
 	return &info
 }
 
-func initReplConf[T ~[]byte](s *CommandHandler[T]) *command.Command {
+func initReplConf(s *CommandHandler) *command.Command {
 	replConf := command.Command{
 		Name:  "replconf",
 		RunFn: s.replconf,
@@ -89,12 +89,12 @@ func initReplConf[T ~[]byte](s *CommandHandler[T]) *command.Command {
 	return &replConf
 }
 
-func (s *CommandHandler[T]) ping(_ resp.Array, w io.Writer) error {
+func (s *CommandHandler) ping(_ resp.Array, w io.Writer) error {
 	_, err := w.Write(resp.BulkString{Str: "PONG"}.Bytes())
 	return err
 }
 
-func (s *CommandHandler[T]) echo(arr resp.Array, w io.Writer) error {
+func (s *CommandHandler) echo(arr resp.Array, w io.Writer) error {
 	if len(arr) == 0 {
 		_, err := w.Write(resp.SimpleString("").Bytes())
 		return err
@@ -109,7 +109,7 @@ func (s *CommandHandler[T]) echo(arr resp.Array, w io.Writer) error {
 	return err
 }
 
-func (s *CommandHandler[T]) get(arr resp.Array, w io.Writer) error {
+func (s *CommandHandler) get(arr resp.Array, w io.Writer) error {
 	if len(arr) != 1 {
 		err := errors.New("ERR only 1 arg needed")
 		w.Write(resp.SimpleError(err.Error()).Bytes())
@@ -154,7 +154,7 @@ func parseSetParam(key, val resp.CMD, p *store.SetParam) error {
 	}
 }
 
-func (s *CommandHandler[T]) set(arr resp.Array, w io.Writer) error {
+func (s *CommandHandler) set(arr resp.Array, w io.Writer) error {
 	param := store.SetParam{}
 	if len(arr) < 2 {
 		err := errors.New("ERR k,v args needed")
@@ -174,7 +174,7 @@ func (s *CommandHandler[T]) set(arr resp.Array, w io.Writer) error {
 	return err
 }
 
-func (srv *CommandHandler[T]) info(_ resp.Array, w io.Writer) error {
+func (srv *CommandHandler) info(_ resp.Array, w io.Writer) error {
 	builder := strings.Builder{}
 	if err := srv.infoReplicationString(&builder); err != nil {
 		return errors.Wrap(err, "info")
@@ -184,7 +184,7 @@ func (srv *CommandHandler[T]) info(_ resp.Array, w io.Writer) error {
 	return err
 }
 
-func (s *CommandHandler[T]) infoReplication(_ resp.Array, w io.Writer) error {
+func (s *CommandHandler) infoReplication(_ resp.Array, w io.Writer) error {
 	builder := strings.Builder{}
 	if err := s.infoReplicationString(&builder); err != nil {
 		return err
@@ -194,7 +194,7 @@ func (s *CommandHandler[T]) infoReplication(_ resp.Array, w io.Writer) error {
 	return err
 }
 
-func (s *CommandHandler[T]) infoReplicationString(w io.Writer) error {
+func (s *CommandHandler) infoReplicationString(w io.Writer) error {
 	if _, err := io.WriteString(w, "# Replication\n"); err != nil {
 		return errors.Wrap(err, "replication")
 	}
@@ -214,12 +214,12 @@ func (s *CommandHandler[T]) infoReplicationString(w io.Writer) error {
 	return nil
 }
 
-func (s *CommandHandler[T]) replconf(_ resp.Array, w io.Writer) error {
+func (s *CommandHandler) replconf(_ resp.Array, w io.Writer) error {
 	w.Write(resp.SimpleError("ERR incorrect number of arguments").Bytes())
 	return nil
 }
 
-func (s *CommandHandler[T]) replConfListeningPort(arr resp.Array, w io.Writer) error {
+func (s *CommandHandler) replConfListeningPort(arr resp.Array, w io.Writer) error {
 	if len(arr) < 1 {
 		w.Write(resp.SimpleError("ERR incorrect number of arguments").Bytes())
 		return nil
@@ -230,12 +230,12 @@ func (s *CommandHandler[T]) replConfListeningPort(arr resp.Array, w io.Writer) e
 	return nil
 }
 
-func (s *CommandHandler[T]) replConfCapa(_ resp.Array, w io.Writer) error {
+func (s *CommandHandler) replConfCapa(_ resp.Array, w io.Writer) error {
 	w.Write(resp.SimpleString("OK").Bytes())
 	return nil
 }
 
-func (s *CommandHandler[T]) replConfGetack(arr resp.Array, w io.Writer) error {
+func (s *CommandHandler) replConfGetack(arr resp.Array, w io.Writer) error {
 	if len(arr) == 0 {
 		return errors.New("expected atleast one args")
 	}
@@ -259,7 +259,7 @@ func (s *CommandHandler[T]) replConfGetack(arr resp.Array, w io.Writer) error {
 	return nil
 }
 
-func (s *CommandHandler[T]) psync(arr resp.Array, w io.Writer) error {
+func (s *CommandHandler) psync(arr resp.Array, w io.Writer) error {
 	if len(arr) < 2 {
 		w.Write(resp.SimpleError("ERR incorrect number of arguments").Bytes())
 		return nil
@@ -294,24 +294,15 @@ func (s *CommandHandler[T]) psync(arr resp.Array, w io.Writer) error {
 		panic(err)
 	}
 
-	ch := s.replication.Subscribe()
-	defer s.replication.Unsubscribe(ch)
-
 	wbin := []byte(fmt.Sprintf("$%d\r\n", len(bin)))
 	wbin = append(wbin, bin...)
 	w.Write(wbin)
 
-	for {
-		data := <-ch
-		_, err := w.Write(data)
-		if err != nil {
-			fmt.Println("error replicating:", err)
-			return nil
-		}
-	}
+	s.repl.StartSync(w)
+	return nil
 }
 
-func (s *CommandHandler[T]) wait(arr resp.Array, w io.Writer) error {
+func (s *CommandHandler) wait(arr resp.Array, w io.Writer) error {
 	a, ok := resp.IsInt(arr[0])
 	if !ok {
 		err := errors.Errorf("ERR expected int type %s", arr[0])
@@ -326,7 +317,8 @@ func (s *CommandHandler[T]) wait(arr resp.Array, w io.Writer) error {
 		return err
 	}
 
-	fmt.Println(a, b)
-	w.Write(resp.Int(s.cfg.ConnectedReplicas()).Bytes())
+	duration := time.Duration(b)
+	replicaResponded := s.repl.NumProcessedCmd(a, time.Millisecond*duration)
+	w.Write(resp.Int(replicaResponded).Bytes())
 	return nil
 }

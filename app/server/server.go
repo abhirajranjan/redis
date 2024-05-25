@@ -4,15 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"net"
 	"os"
 
 	"github.com/codecrafters-io/redis-starter-go/app/commandHandler"
 	"github.com/codecrafters-io/redis-starter-go/app/config"
+	"github.com/codecrafters-io/redis-starter-go/app/replication"
 
-	"github.com/codecrafters-io/redis-starter-go/pkg/replication"
 	"github.com/codecrafters-io/redis-starter-go/pkg/resp"
 	"github.com/codecrafters-io/redis-starter-go/pkg/store"
 )
@@ -22,23 +21,21 @@ type CmdHandler interface {
 }
 
 type server struct {
-	store          *store.Store
-	stateConfig    *serverStateConfig[[]byte]
+	stateConfig    *serverStateConfig
 	commandHandler CmdHandler
-	replication    replication.Replication[[]byte]
+	replication    *replication.Replication
 }
 
 func NewServer(config *config.Config) *server {
 	var (
-		store = store.NewStore()
-		repl  = replication.New[[]byte]()
-		cfg   = &serverStateConfig[[]byte]{Config: config, repl: repl}
+		store        = store.NewStore()
+		repl         = replication.NewReplicaTelemetry()
+		serverConfig = &serverStateConfig{Config: config}
 	)
 
 	s := &server{
-		store:          store,
-		commandHandler: commandHandler.NewCommandHandler(store, repl, cfg),
-		stateConfig:    cfg,
+		commandHandler: commandHandler.NewCommandHandler(store, serverConfig, repl),
+		stateConfig:    serverConfig,
 		replication:    repl,
 	}
 
@@ -87,7 +84,6 @@ func (s *server) Run() {
 func (s *server) handleMasterConn(conn io.ReadWriteCloser) {
 	defer conn.Close()
 
-	fmt.Println("master")
 	for {
 		arr, err := s.commandHandler.HandleCmd(conn)
 		s.stateConfig.bytesProcessed.Add(int64(len(arr.Bytes())))
@@ -109,26 +105,5 @@ func (s *server) publishMessage(cmd resp.Array) {
 		return
 	}
 
-	if iswriteCMD(cmd) {
-		b := cmd.Bytes()
-		s.replication.Publish(b)
-	}
-}
-
-func iswriteCMD(cmd resp.Array) bool {
-	if len(cmd) == 0 {
-		return false
-	}
-
-	s, ok := resp.IsString(cmd[0])
-	if !ok {
-		return false
-	}
-
-	switch strings.ToLower(s) {
-	case "set":
-		return true
-	default:
-		return false
-	}
+	s.replication.PublishArray(cmd)
 }

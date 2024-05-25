@@ -3,10 +3,11 @@ package commandHandler
 import (
 	"fmt"
 	"io"
+	"log"
+	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/app/config"
 	"github.com/codecrafters-io/redis-starter-go/pkg/command"
-	"github.com/codecrafters-io/redis-starter-go/pkg/replication"
 	"github.com/codecrafters-io/redis-starter-go/pkg/resp"
 	"github.com/codecrafters-io/redis-starter-go/pkg/store"
 	"github.com/pkg/errors"
@@ -14,27 +15,30 @@ import (
 
 var ErrConnectionClose = errors.New("close connection request")
 
-type cfg interface {
+type serverConfig interface {
 	ReplicationRole() config.Role
 	MasterReplId() string
 	MasterReplOffset() int64
 	BytesProcessed() int64
-	ConnectedReplicas() int64
 }
 
-type CommandHandler[T ~[]byte] struct {
-	store       *store.Store
-	cmdRunner   *command.Command
-	replication replication.Replication[T]
-	cfg         cfg
+type replication interface {
+	StartSync(w io.Writer)
+	NumProcessedCmd(atleastAck int64, timeout time.Duration) int64
 }
 
-func NewCommandHandler[T ~[]byte](store *store.Store, replication replication.Replication[T], cfg cfg) *CommandHandler[T] {
-	s := &CommandHandler[T]{
-		store:       store,
-		replication: replication,
-		cfg:         cfg,
+type CommandHandler struct {
+	store     *store.Store
+	cmdRunner *command.Command
+	cfg       serverConfig
+	repl      replication
+}
 
+func NewCommandHandler(store *store.Store, cfg serverConfig, repl replication) *CommandHandler {
+	s := &CommandHandler{
+		store: store,
+		cfg:   cfg,
+		repl:  repl,
 		cmdRunner: &command.Command{
 			RunFn: func(_ resp.Array, w io.Writer) error {
 				err := errors.New("invalid Command")
@@ -49,7 +53,7 @@ func NewCommandHandler[T ~[]byte](store *store.Store, replication replication.Re
 }
 
 // if alive returns false means connection should be closed
-func (c *CommandHandler[T]) HandleCmd(conn io.ReadWriter) (arr resp.Array, err error) {
+func (c *CommandHandler) HandleCmd(conn io.ReadWriter) (arr resp.Array, err error) {
 	data, err := resp.Parse(conn)
 	if err == io.EOF {
 		return nil, ErrConnectionClose
@@ -65,6 +69,8 @@ func (c *CommandHandler[T]) HandleCmd(conn io.ReadWriter) (arr resp.Array, err e
 		conn.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err.Error())))
 		return nil, err
 	}
+
+	log.Printf("Replication: recv command: %#v", arr)
 
 	if err := c.cmdRunner.Run(arr, conn); err != nil {
 		conn.Write([]byte(fmt.Sprintf("-ERR %s\r\n", "unknown command")))
