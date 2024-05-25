@@ -70,7 +70,7 @@ func (c *CommandHandler) HandleCmd(conn io.ReadWriter) (arr resp.Array, err erro
 		return nil, err
 	}
 
-	log.Printf("Replication: recv command: %#v", arr)
+	log.Printf(string(c.cfg.ReplicationRole()), "Replication: recv command: %#v\n", arr)
 
 	if err := c.cmdRunner.Run(arr, conn); err != nil {
 		conn.Write([]byte(fmt.Sprintf("-ERR %s\r\n", "unknown command")))
