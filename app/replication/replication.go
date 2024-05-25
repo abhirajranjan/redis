@@ -56,6 +56,7 @@ func (r *Replication) StartSync(rw io.ReadWriter) {
 
 		case *numProcessedCmd:
 			if !r.isFirstCmd {
+				time.Sleep(time.Second * 1)
 				cmd := resp.Array{
 					resp.BulkString{Str: "REPLCONF"},
 					resp.BulkString{Str: "GETACK"},
@@ -91,7 +92,7 @@ func (r *Replication) PublishArray(cmd resp.Array) {
 		return
 	}
 
-	log.Printf("Replication: publish command: %#v\n", cmd)
+	log.Printf("Replication: publish command\n")
 
 	r.repl.Publish(&regularCommand{
 		Data: bytes.NewReader(cmd.Bytes()),
