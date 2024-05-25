@@ -69,7 +69,7 @@ func (r *Replication) PublishArray(cmd resp.Array) {
 		return
 	}
 
-	log.Printf("Replication: publish command: %#v", cmd)
+	log.Printf("Replication: publish command: %#v\n", cmd)
 
 	r.repl.Publish(&regularCommand{
 		Data: bytes.NewReader(cmd.Bytes()),
