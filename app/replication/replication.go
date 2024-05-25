@@ -56,6 +56,7 @@ func (r *Replication) StartSync(rw io.ReadWriter) {
 
 		case *numProcessedCmd:
 			if !r.isFirstCmd {
+				time.Sleep(time.Second * 1)
 				cmd := resp.Array{
 					resp.BulkString{Str: "REPLCONF"},
 					resp.BulkString{Str: "GETACK"},
