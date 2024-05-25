@@ -298,7 +298,12 @@ func (s *CommandHandler) psync(arr resp.Array, w io.Writer) error {
 	wbin = append(wbin, bin...)
 	w.Write(wbin)
 
-	s.repl.StartSync(w)
+	a, ok := w.(io.ReadWriter)
+	if !ok {
+		return errors.Errorf("psync: %#v is not of type io.ReadWriter", w)
+	}
+
+	s.repl.StartSync(a)
 	return nil
 }
 

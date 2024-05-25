@@ -23,7 +23,7 @@ type serverConfig interface {
 }
 
 type replication interface {
-	StartSync(w io.Writer)
+	StartSync(w io.ReadWriter)
 	NumProcessedCmd(atleastAck int64, timeout time.Duration) int64
 }
 
@@ -70,7 +70,7 @@ func (c *CommandHandler) HandleCmd(conn io.ReadWriter) (arr resp.Array, err erro
 		return nil, err
 	}
 
-	log.Printf(string(c.cfg.ReplicationRole()), "Replication: recv command: %#v\n", arr)
+	log.Printf("%s: Replication: recv command: %#v\n", string(c.cfg.ReplicationRole()), arr)
 
 	if err := c.cmdRunner.Run(arr, conn); err != nil {
 		conn.Write([]byte(fmt.Sprintf("-ERR %s\r\n", "unknown command")))

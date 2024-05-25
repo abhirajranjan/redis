@@ -30,6 +30,7 @@ type Replication struct {
 	repl            pubSub[cmd]
 	NumProcessedMap map[int64]*atomic.Int64
 	NumProcessedMu  sync.Mutex
+	isFirstCmd      bool
 }
 
 func NewReplicaTelemetry() *Replication {
@@ -37,22 +38,43 @@ func NewReplicaTelemetry() *Replication {
 		repl:            pubsub.New[cmd](),
 		NumProcessedMap: make(map[int64]*atomic.Int64),
 		NumProcessedMu:  sync.Mutex{},
+		isFirstCmd:      true,
 	}
 }
 
-func (r *Replication) StartSync(w io.Writer) {
+func (r *Replication) StartSync(rw io.ReadWriter) {
 	ch := r.repl.Subscribe()
 	defer r.repl.Unsubscribe(ch)
 
 	for data := range ch {
 		switch d := data.(type) {
 		case *regularCommand:
-			_, err := io.Copy(w, d)
+			_, err := io.Copy(rw, d)
 			if err != nil {
 				fmt.Println("WARN", err)
 			}
 
 		case *numProcessedCmd:
+			if !r.isFirstCmd {
+				cmd := resp.Array{
+					resp.BulkString{Str: "REPLCONF"},
+					resp.BulkString{Str: "GETACK"},
+					resp.BulkString{Str: "*"},
+				}
+
+				if _, err := rw.Write(cmd.Bytes()); err != nil {
+					fmt.Println("WARN", err)
+					continue
+				}
+
+				// get ack
+				_, err := resp.Parse(rw)
+				if err != nil {
+					fmt.Println("WARN", err)
+					continue
+				}
+			}
+
 			r.NumProcessedMu.Lock()
 			c, ok := r.NumProcessedMap[d.nonce]
 			r.NumProcessedMu.Unlock()
@@ -74,6 +96,10 @@ func (r *Replication) PublishArray(cmd resp.Array) {
 	r.repl.Publish(&regularCommand{
 		Data: bytes.NewReader(cmd.Bytes()),
 	})
+
+	if r.isFirstCmd {
+		r.isFirstCmd = false
+	}
 }
 
 func (r *Replication) NumProcessedCmd(atleastAck int64, timeout time.Duration) int64 {
