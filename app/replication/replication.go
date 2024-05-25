@@ -1,10 +1,8 @@
 package replication
 
 import (
-	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"strings"
 	"sync"
@@ -49,13 +47,14 @@ func (r *Replication) StartSync(rw io.ReadWriter) {
 	for data := range ch {
 		switch d := data.(type) {
 		case *regularCommand:
-			_, err := io.Copy(rw, d)
+			_, err := rw.Write(d.Data)
 			if err != nil {
 				fmt.Println("WARN", err)
 			}
 
 		case *numProcessedCmd:
 			if !r.isFirstCmd {
+				time.Sleep(time.Second * 1)
 				cmd := resp.Array{
 					resp.BulkString{Str: "REPLCONF"},
 					resp.BulkString{Str: "GETACK"},
@@ -91,10 +90,8 @@ func (r *Replication) PublishArray(cmd resp.Array) {
 		return
 	}
 
-	log.Printf("Replication: publish command: %#v\n", cmd)
-
 	r.repl.Publish(&regularCommand{
-		Data: bytes.NewReader(cmd.Bytes()),
+		Data: cmd.Bytes(),
 	})
 
 	if r.isFirstCmd {
