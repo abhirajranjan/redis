@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand/v2"
+	"math/rand"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -82,7 +82,7 @@ func (r *Replication) NumProcessedCmd(atleastAck int64, timeout time.Duration) i
 	}
 
 	t := time.NewTimer(timeout)
-	nonce := rand.Int64()
+	nonce := rand.Int63()
 	val := &atomic.Int64{}
 
 	r.NumProcessedMu.Lock()
