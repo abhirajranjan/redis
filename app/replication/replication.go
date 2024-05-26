@@ -1,7 +1,6 @@
 package replication
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -49,10 +48,12 @@ func (r *Replication) StartSync(rw io.ReadWriter) {
 	for data := range ch {
 		switch d := data.(type) {
 		case *regularCommand:
-			_, err := io.Copy(rw, d)
+			_, err := rw.Write(d.Data)
 			if err != nil {
-				fmt.Println("WARN", err)
+				fmt.Println("WARN writing regularCmd in replica: ", err)
 			}
+
+			log.Printf("written to replica: %#v", data)
 
 		case *numProcessedCmd:
 			if !r.isFirstCmd {
@@ -68,9 +69,22 @@ func (r *Replication) StartSync(rw io.ReadWriter) {
 				}
 
 				// get ack
-				_, err := resp.Parse(rw)
+				ack, err := resp.Parse(rw)
 				if err != nil {
 					fmt.Println("WARN", err)
+					continue
+				}
+
+				ackResp, ok := ack.(resp.Array)
+				if !ok {
+					fmt.Println("not array")
+					continue
+				}
+
+				log.Printf("Replication: recv ack: %#v\n\n", ack)
+
+				bs, ok := ackResp[0].(resp.BulkString)
+				if !ok || strings.ToLower(bs.Str) != "replconf" {
 					continue
 				}
 			}
@@ -91,10 +105,8 @@ func (r *Replication) PublishArray(cmd resp.Array) {
 		return
 	}
 
-	log.Printf("Replication: publish command: %#v\n", cmd)
-
 	r.repl.Publish(&regularCommand{
-		Data: bytes.NewReader(cmd.Bytes()),
+		Data: cmd.Bytes(),
 	})
 
 	if r.isFirstCmd {
@@ -108,6 +120,10 @@ func (r *Replication) NumProcessedCmd(atleastAck int64, timeout time.Duration) i
 	}
 
 	t := time.NewTimer(timeout)
+	defer t.Stop()
+	t1 := time.NewTicker(50 * time.Millisecond)
+	defer t1.Stop()
+
 	nonce := rand.Int63()
 	val := &atomic.Int64{}
 
@@ -121,7 +137,11 @@ func (r *Replication) NumProcessedCmd(atleastAck int64, timeout time.Duration) i
 
 	for {
 		select {
+		case <-t1.C:
+			log.Println(val.Load(), r.repl.NumSubscriber())
+
 		case <-t.C:
+			log.Println("timeout")
 			r.NumProcessedMu.Lock()
 			delete(r.NumProcessedMap, nonce)
 			r.NumProcessedMu.Unlock()
@@ -130,6 +150,7 @@ func (r *Replication) NumProcessedCmd(atleastAck int64, timeout time.Duration) i
 
 		default:
 			if val.Load() >= atleastAck {
+				log.Println("get ack")
 				r.NumProcessedMu.Lock()
 				delete(r.NumProcessedMap, nonce)
 				r.NumProcessedMu.Unlock()
