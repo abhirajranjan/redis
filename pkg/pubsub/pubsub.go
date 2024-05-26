@@ -20,7 +20,7 @@ var _ PubSub[any] = (*pubSub[any])(nil)
 func New[T any]() PubSub[T] {
 	r := &pubSub[T]{
 		subscriberMap: map[chan T]struct{}{},
-		pub:           make(chan T),
+		pub:           make(chan T, 1000),
 		request:       make(chan request[T]),
 	}
 
