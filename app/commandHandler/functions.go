@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -324,6 +325,11 @@ func (s *CommandHandler) wait(arr resp.Array, w io.Writer) error {
 
 	duration := time.Duration(b)
 	replicaResponded := s.repl.NumProcessedCmd(a, time.Millisecond*duration)
-	w.Write(resp.Int(replicaResponded).Bytes())
+	fmt.Println("response", resp.Int(replicaResponded))
+
+	if _, err := w.Write(resp.Int(replicaResponded).Bytes()); err != nil {
+		log.Println("wait WARN:", err)
+	}
+
 	return nil
 }
