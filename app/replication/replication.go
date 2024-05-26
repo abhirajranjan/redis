@@ -1,7 +1,6 @@
 package replication
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -49,7 +48,7 @@ func (r *Replication) StartSync(rw io.ReadWriter) {
 	for data := range ch {
 		switch d := data.(type) {
 		case *regularCommand:
-			_, err := io.Copy(rw, d)
+			_, err := rw.Write(d.Data)
 			if err != nil {
 				fmt.Println("WARN", err)
 			}
@@ -68,9 +67,27 @@ func (r *Replication) StartSync(rw io.ReadWriter) {
 				}
 
 				// get ack
-				_, err := resp.Parse(rw)
+				ack, err := resp.Parse(rw)
 				if err != nil {
 					fmt.Println("WARN", err)
+					continue
+				}
+
+				log.Printf("Replication: recv ack: %#v", ack)
+
+				ackResp, ok := ack.(resp.Array)
+				if !ok {
+					fmt.Println("not array")
+					continue
+				}
+
+				bs, ok := ackResp[0].(resp.BulkString)
+				if !ok || strings.ToLower(bs.Str) == "replconf" {
+					continue
+				}
+
+				bs, ok = ackResp[1].(resp.BulkString)
+				if !ok || strings.ToLower(bs.Str) == "ack" {
 					continue
 				}
 			}
@@ -91,10 +108,8 @@ func (r *Replication) PublishArray(cmd resp.Array) {
 		return
 	}
 
-	log.Printf("Replication: publish command: %#v\n", cmd)
-
 	r.repl.Publish(&regularCommand{
-		Data: bytes.NewReader(cmd.Bytes()),
+		Data: cmd.Bytes(),
 	})
 
 	if r.isFirstCmd {
@@ -122,6 +137,7 @@ func (r *Replication) NumProcessedCmd(atleastAck int64, timeout time.Duration) i
 	for {
 		select {
 		case <-t.C:
+			log.Println("timeout")
 			r.NumProcessedMu.Lock()
 			delete(r.NumProcessedMap, nonce)
 			r.NumProcessedMu.Unlock()
@@ -130,6 +146,7 @@ func (r *Replication) NumProcessedCmd(atleastAck int64, timeout time.Duration) i
 
 		default:
 			if val.Load() >= atleastAck {
+				log.Println("get ack")
 				r.NumProcessedMu.Lock()
 				delete(r.NumProcessedMap, nonce)
 				r.NumProcessedMu.Unlock()
