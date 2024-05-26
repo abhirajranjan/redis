@@ -324,6 +324,7 @@ func (s *CommandHandler) wait(arr resp.Array, w io.Writer) error {
 
 	duration := time.Duration(b)
 	replicaResponded := s.repl.NumProcessedCmd(a, time.Millisecond*duration)
+	fmt.Println("response", resp.Int(replicaResponded))
 	w.Write(resp.Int(replicaResponded).Bytes())
 	return nil
 }
