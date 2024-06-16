@@ -1,5 +1,7 @@
 package pubsub
 
+import "fmt"
+
 type PubSub[T any] interface {
 	Publish(data T)
 	Subscribe() chan T
@@ -20,7 +22,7 @@ var _ PubSub[any] = (*pubSub[any])(nil)
 func New[T any]() PubSub[T] {
 	r := &pubSub[T]{
 		subscriberMap: map[chan T]struct{}{},
-		pub:           make(chan T),
+		pub:           make(chan T, 1000),
 		request:       make(chan request[T]),
 	}
 
@@ -59,6 +61,7 @@ func (repl pubSub[T]) handleRequest(req request[T]) {
 }
 
 func (r *pubSub[T]) Publish(data T) {
+	fmt.Printf("publishing: %v\n", data)
 	r.pub <- data
 }
 
